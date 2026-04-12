@@ -1,0 +1,4 @@
+# Secrets locaux — ne jamais committer
+.env
+.env.local
+.secret.local

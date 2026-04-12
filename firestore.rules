@@ -1,0 +1,206 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Fonction helper pour vérifier qu'un utilisateur est authentifié
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Fonction helper pour vérifier qu'un utilisateur est le propriétaire
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Collection des utilisateurs
+    match /users/{userId} {
+      // Lecture : tous les utilisateurs authentifiés peuvent voir les profils
+      allow read: if isSignedIn();
+      
+      // Écriture : uniquement le propriétaire du profil
+      allow create, update, delete: if isOwner(userId);
+    }
+    
+    // Collection des posts (publications)
+    match /posts/{postId} {
+      // Lecture : tout le monde peut lire les posts (y compris sans Firebase Auth)
+      allow read: if true;
+      
+      // Création : utilisateur authentifié uniquement
+      // Le userId dans le post doit correspondre à l'utilisateur courant
+      allow create: if isSignedIn() 
+                    && request.resource.data.userId == request.auth.uid;
+      
+      // Mise à jour : 
+      // - Le propriétaire peut modifier son post (texte, images)
+      // - N'importe qui peut liker/unliker (pour incrémenter les compteurs)
+      allow update: if isSignedIn() && (
+        // Propriétaire peut tout modifier
+        isOwner(resource.data.userId)
+        ||
+        // Autres utilisateurs peuvent uniquement modifier likes, likedBy, reactions, shares et sharedBy
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy', 'shares', 'reactions', 'sharedBy']))
+      );
+      
+      // Suppression : uniquement le propriétaire
+      allow delete: if isSignedIn() && isOwner(resource.data.userId);
+    }
+    
+    // Collection des commentaires
+    match /comments/{commentId} {
+      // Lecture : tous les utilisateurs authentifiés peuvent voir les commentaires
+      allow read: if isSignedIn();
+      
+      // Création : utilisateur authentifié uniquement
+      // Le userId dans le commentaire doit correspondre à l'utilisateur courant
+      allow create: if isSignedIn() 
+                    && request.resource.data.userId == request.auth.uid;
+      
+      // Mise à jour : 
+      // - Le propriétaire peut modifier son commentaire
+      // - N'importe qui peut liker/unliker
+      allow update: if isSignedIn() && (
+        isOwner(resource.data.userId)
+        ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy']))
+      );
+      
+      // Suppression : uniquement le propriétaire du commentaire
+      //              OU le propriétaire du post parent
+      allow delete: if isSignedIn() && (
+        isOwner(resource.data.userId)
+        || (
+          // Propriétaire du post peut supprimer les commentaires de son post
+          exists(/databases/$(database)/documents/posts/$(resource.data.postId))
+          && isOwner(get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.userId)
+        )
+      );
+    }
+    
+    // Collection des conversations (chat)
+    match /conversations/{conversationId} {
+      // resource == null quand le document n'existe pas encore
+      // (nécessaire pour que openConversation() puisse faire ref.get() avant de créer)
+      allow read: if isSignedIn() 
+                  && (resource == null
+                      || request.auth.uid in resource.data.participants);
+      
+      allow create: if isSignedIn() 
+                    && request.auth.uid in request.resource.data.participants;
+      
+      allow update: if isSignedIn() 
+                    && request.auth.uid in resource.data.participants;
+      
+      allow delete: if isSignedIn() 
+                    && request.auth.uid in resource.data.participants;
+
+      // Sous-collection des messages — chemin correct
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+                    && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+
+        allow create: if isSignedIn()
+                      && request.resource.data.senderId == request.auth.uid;
+
+        allow update, delete: if isSignedIn()
+                              && resource.data.senderId == request.auth.uid;
+      }
+    }
+    
+    // Collection lives (pour les streams) — champ hostUid
+    match /lives/{liveId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isSignedIn() 
+                    && request.resource.data.hostUid == request.auth.uid;
+      
+      allow update: if isSignedIn() && (
+        // Hôte peut tout modifier
+        isOwner(resource.data.hostUid)
+        ||
+        // N'importe qui peut incrémenter/décrémenter viewerCount
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewerCount'])
+        ||
+        // Terminer le live (isLive=false, endedAt)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isLive', 'endedAt'])
+      );
+      
+      allow delete: if isSignedIn() && isOwner(resource.data.hostUid);
+
+      // Sous-collection des commentaires du live
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.uid == request.auth.uid;
+        allow delete: if isSignedIn()
+                      && resource.data.uid == request.auth.uid;
+      }
+    }
+    
+    // Collection des stories (statuts 24h)
+    match /stories/{storyId} {
+      // Lecture : tout utilisateur authentifié peut voir les stories actives
+      allow read: if isSignedIn();
+
+      // Création : l'auteur doit être l'utilisateur courant
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid;
+
+      // Mise à jour : propriétaire (modifier) ou tout auth (viewedBy)
+      allow update: if isSignedIn() && (
+        isOwner(resource.data.userId)
+        ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
+      );
+
+      // Suppression : uniquement le propriétaire
+      allow delete: if isSignedIn() && isOwner(resource.data.userId);
+
+      // Sous-collection des commentaires de story
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.userId == request.auth.uid;
+        allow delete: if isSignedIn()
+                      && resource.data.userId == request.auth.uid;
+        allow update: if false; // commentaires non modifiables
+      }
+    }
+
+    // Règle par défaut : bloquer tout le reste
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Collection des appels audio/vidéo (signalisation P2P)
+    match /calls/{callId} {      // Lecture : appelant ou appelé uniquement
+      allow read: if isSignedIn() && (
+        resource == null
+        || request.auth.uid == resource.data.callerId
+        || request.auth.uid == resource.data.calleeId
+      );
+
+      // Création : l'appelant doit être l'utilisateur courant
+      allow create: if isSignedIn()
+                    && request.resource.data.callerId == request.auth.uid;
+
+      // Mise à jour du statut : appelant ou appelé
+      allow update: if isSignedIn() && (
+        resource.data.callerId == request.auth.uid
+        || resource.data.calleeId == request.auth.uid
+      ) && request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['status']);
+
+      allow delete: if false;
+    }
+
+    // Collection des notifications in-app
+    match /notifications/{userId}/items/{notifId} {
+      // Lecture et mise à jour (marquer lu) : utilisateur propriétaire uniquement
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      // Création uniquement via Cloud Functions (côté serveur)
+      allow create, delete: if false;
+    }
+  }
+}
+

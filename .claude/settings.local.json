@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(keytool -list -v -keystore \"C:/Users/OD233007/.android/debug.keystore\" -alias androiddebugkey -storepass android -keypass android)",
+      "Bash(xargs grep:*)",
+      "Bash(flutter analyze:*)"
+    ]
+  }
+}

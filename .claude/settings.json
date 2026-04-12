@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(flutter run:*)",
+      "Bash(flutter build:*)",
+      "Bash(./gradlew assembleDebug --stacktrace)",
+      "Bash(flutter --version)",
+      "Bash(flutter clean:*)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(./gradlew assembleDebug --info)",
+      "Bash(flutter pub:*)",
+      "Bash(./gradlew assembleDebug --debug)",
+      "Read(//c/Users/OD233007/AppData/Local/Pub/Cache/hosted/pub.dev/agora_rtc_engine-6.5.3/android/**)",
+      "Read(//c/flutter/src/flutter/packages/flutter_tools/gradle/src/main/kotlin/com/flutter/gradle/plugins/**)",
+      "Read(//c/flutter/src/flutter/packages/flutter_tools/gradle/**)",
+      "Bash(grep -v \"Try \\\\`flutter pub\")"
+    ]
+  }
+}

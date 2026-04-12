@@ -1,0 +1,101 @@
+stages:
+  - test
+  - build
+
+variables:
+  GIT_STRATEGY: fetch
+
+# Script exécuté avant chaque job
+default:
+  before_script:
+    - flutter --version
+    - flutter pub get
+
+# ─── STAGE TEST (toutes les branches) ──────────────────────
+
+analyze:
+  stage: test
+  script:
+    - flutter analyze || true   # Affiche les warnings sans bloquer
+  allow_failure: true
+
+unit_test:
+  stage: test
+  script:
+    - flutter test || true      # Affiche les erreurs sans bloquer
+  allow_failure: true
+
+# ─── BUILD DEBUG → branche develop ─────────────────────────
+
+build_debug:
+  stage: build
+  script:
+    - flutter build apk --debug --split-per-abi
+  after_script:
+    - "cd android; .\\gradlew.bat --stop"
+  artifacts:
+    name: "siade-debug-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+    expire_in: 3 days
+  only:
+    - develop
+
+# ─── BUILD RELEASE ANDROID → branche main ──────────────────
+
+build_release:
+  stage: build
+  before_script:
+    - flutter pub get
+    # Debug : vérifier les variables d'environnement
+    - "Write-Host \"ANDROID_SDK_ROOT: $env:ANDROID_SDK_ROOT\""
+    - "Write-Host \"JAVA_HOME: $env:JAVA_HOME\""
+    # Définir ANDROID_SDK_ROOT si absent
+    - "if (-not $env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT = 'C:\\Users\\OD233007\\AppData\\Local\\Android\\sdk'; $env:ANDROID_HOME = 'C:\\Users\\OD233007\\AppData\\Local\\Android\\sdk' }"
+    # Nettoyer le base64 certutil (retire les lignes -----BEGIN/END CERTIFICATE-----)
+    - "$b64clean = ($env:KEYSTORE_BASE64 -split \"`n\" | Where-Object { $_ -notmatch '^-----' -and $_.Trim() -ne '' }) -join ''"
+    - "$keystoreBytes = [Convert]::FromBase64String($b64clean)"
+    - "[IO.File]::WriteAllBytes((Resolve-Path 'android/app').Path + '\\upload-keystore.jks', $keystoreBytes)"
+    - "[IO.File]::WriteAllText((Resolve-Path 'android').Path + '\\key.properties', \"storePassword=$env:KEYSTORE_PASSWORD`nkeyPassword=$env:KEY_PASSWORD`nkeyAlias=upload`nstoreFile=upload-keystore.jks`n\", [System.Text.Encoding]::ASCII)"
+    # Debug : vérifier les fichiers créés
+    - "Get-Content android\\key.properties"
+    - "Test-Path android\\app\\upload-keystore.jks"
+  script:
+    - flutter build apk --release --split-per-abi
+  after_script:
+    - "if (Test-Path 'android\\app\\upload-keystore.jks') { Remove-Item 'android\\app\\upload-keystore.jks' -Force }"
+    - "if (Test-Path 'android\\key.properties') { Remove-Item 'android\\key.properties' -Force }"
+    - "cd android; .\\gradlew.bat --stop"
+  artifacts:
+    name: "siade-release-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+    expire_in: 7 days
+  only:
+    - main
+
+# ─── BUILD iOS → branche main (nécessite runner macOS) ──────
+
+build_ios:
+  stage: build
+  tags:
+    - macos                    # ⚠️ Runner macOS requis
+  before_script:
+    - flutter pub get
+    # Installer le certificat Apple depuis variable GitLab
+    - echo $IOS_CERTIFICATE | base64 -d > ios_cert.p12
+    - security import ios_cert.p12 -P "$IOS_CERTIFICATE_PASSWORD" -A
+    # Installer le provisioning profile
+    - echo $IOS_PROVISIONING_PROFILE | base64 -d > profile.mobileprovision
+    - mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+    - cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+  script:
+    - flutter build ios --release --no-codesign
+  artifacts:
+    name: "siade-ios-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/ios/iphoneos/Runner.app
+    expire_in: 7 days
+  only:
+    - main
+  when: manual   # Déclenchement manuel jusqu'à avoir le runner macOS

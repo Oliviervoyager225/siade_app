@@ -102,6 +102,8 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/images/sahanalytics.png"
+  image_path_ios: "assets/images/sahanalytics_ios.png"
+  remove_alpha_ios: true
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/images/sahanalytics.png"
 

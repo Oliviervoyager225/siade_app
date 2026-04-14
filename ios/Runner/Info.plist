@@ -49,5 +49,13 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>NSCameraUsageDescription</key>
+		<string>Cette application nécessite l'accès à la caméra pour vous permettre de diffuser des vidéos en direct et de scanner des documents.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Cette application nécessite l'accès au microphone pour la communication vocale lors des diffusions en direct.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Cette application nécessite l'accès à votre position pour garantir la sécurité et la traçabilité de vos actions de contrôle.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Cette application nécessite l'accès à votre galerie d'images pour vous permettre de joindre des documents professionnels.</string>
 	</dict>
 </plist>

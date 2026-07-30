@@ -8,7 +8,7 @@ import 'package:siade2/main.dart' as app;
 
 /// Génère les captures d'écran App Store Connect.
 ///
-/// Lancement (sur macOS, simulateur iPhone 6,5" démarré) :
+/// Lancement (sur macOS, simulateur iPhone démarré) :
 ///
 ///   flutter drive \
 ///     --driver=test_driver/integration_test.dart \
@@ -16,9 +16,9 @@ import 'package:siade2/main.dart' as app;
 ///     -d SIMULATOR_UDID \
 ///     --dart-define=SCREENSHOT_EMAIL=... --dart-define=SCREENSHOT_PASSWORD=...
 ///
-/// Les PNG atterrissent dans `screenshots/`. Sur un simulateur
-/// iPhone 11 Pro Max / XS Max, la sortie fait exactement 1242 × 2688 px,
-/// le format attendu par Apple pour l'emplacement 6,5 pouces.
+/// Les PNG atterrissent dans `screenshots/`, puis le workflow Codemagic les
+/// ramène à 1284 × 2778, l'un des deux formats acceptés par Apple pour
+/// l'emplacement 6,5 pouces.
 const String kEmail = String.fromEnvironment('SCREENSHOT_EMAIL');
 const String kPassword = String.fromEnvironment('SCREENSHOT_PASSWORD');
 
@@ -33,68 +33,107 @@ void main() {
 
     app.main();
 
-    // `pumpAndSettle` ne convient pas : le splash et les carrousels animent
-    // en boucle, il ne se stabiliserait jamais. On avance par pas fixes.
-    Future<void> settle([int seconds = 3]) async {
-      final end = DateTime.now().add(Duration(seconds: seconds));
-      while (DateTime.now().isBefore(end)) {
+    // `pumpAndSettle` ne convient pas : le splash, le carrousel d'onboarding
+    // et les animations de fond tournent en boucle, il ne se stabiliserait
+    // jamais. On avance par pas fixes.
+    Future<void> patienter(int secondes) async {
+      final fin = DateTime.now().add(Duration(seconds: secondes));
+      while (DateTime.now().isBefore(fin)) {
         await tester.pump(const Duration(milliseconds: 100));
       }
     }
 
-    Future<void> shoot(String name) async {
-      await settle(1);
-      await binding.takeScreenshot(name);
-    }
-
-    // Laisse passer le splash natif + l'init Firebase.
-    await settle(8);
-    await shoot('01_accueil');
-
-    // Écran d'accueil -> écran de connexion.
-    final decouvrir = find.text('Découvrir');
-    if (decouvrir.evaluate().isNotEmpty) {
-      await tester.tap(decouvrir.first, warnIfMissed: false);
-      await settle(3);
-      await shoot('02_connexion');
-    }
-
-    // Connexion réelle si des identifiants ont été fournis au build.
-    if (kEmail.isNotEmpty && kPassword.isNotEmpty) {
-      final champs = find.byType(TextField);
-      if (champs.evaluate().length >= 2) {
-        await tester.enterText(champs.at(0), kEmail);
-        await settle(1);
-        await tester.enterText(champs.at(1), kPassword);
-        await settle(1);
-        await shoot('03_saisie_connexion');
-
-        final seConnecter = find.textContaining(
-          RegExp('connexion|connecter', caseSensitive: false),
-        );
-        if (seConnecter.evaluate().isNotEmpty) {
-          await tester.tap(seConnecter.last, warnIfMissed: false);
-          // L'authentification Firebase + le chargement des données réseau
-          // demandent nettement plus qu'un pump classique.
-          await settle(20);
-          await shoot('04_accueil_connecte');
-
-          // Parcourt la barre de navigation principale pour varier les visuels.
-          final navBar = find.byType(BottomNavigationBar);
-          if (navBar.evaluate().isNotEmpty) {
-            final icones = find.descendant(
-              of: navBar.first,
-              matching: find.byType(Icon),
-            );
-            final total = icones.evaluate().length;
-            for (var i = 1; i < total && i < 4; i++) {
-              await tester.tap(icones.at(i), warnIfMissed: false);
-              await settle(6);
-              await shoot('0${4 + i}_onglet_$i');
-            }
-          }
-        }
+    /// Pompe jusqu'à ce que [f] apparaisse. Rend `false` au bout de
+    /// [secondes] plutôt que de faire échouer le test : une capture
+    /// manquante vaut mieux qu'un run entièrement perdu.
+    Future<bool> attendre(Finder f, {int secondes = 30}) async {
+      final fin = DateTime.now().add(Duration(seconds: secondes));
+      while (DateTime.now().isBefore(fin)) {
+        await tester.pump(const Duration(milliseconds: 200));
+        if (f.evaluate().isNotEmpty) return true;
       }
+      return false;
     }
-  }, timeout: const Timeout(Duration(minutes: 10)));
+
+    Future<void> capturer(String nom) async {
+      await patienter(1);
+      await binding.takeScreenshot(nom);
+      // ignore: avoid_print
+      print('[captures] $nom');
+    }
+
+    // --- Onboarding -------------------------------------------------------
+    // splash_page.dart fait défiler 3 diapos via un Timer de 4 s, puis
+    // pousse WelcomePage. On capture chaque diapo au passage.
+    await patienter(6);
+    await capturer('01_onboarding_1');
+    await patienter(4);
+    await capturer('02_onboarding_2');
+    await patienter(4);
+    await capturer('03_onboarding_3');
+
+    // --- Écran d'accueil --------------------------------------------------
+    final decouvrir = find.text('Découvrir');
+    if (await attendre(decouvrir, secondes: 30)) {
+      await capturer('04_accueil');
+      await tester.tap(decouvrir.first, warnIfMissed: false);
+    } else {
+      // ignore: avoid_print
+      print('[captures] "Découvrir" introuvable, on tente la suite');
+    }
+
+    // --- Connexion --------------------------------------------------------
+    final champs = find.byType(TextField);
+    if (!await attendre(champs, secondes: 20)) {
+      // ignore: avoid_print
+      print('[captures] écran de connexion jamais atteint');
+      return;
+    }
+    await capturer('05_connexion');
+
+    if (kEmail.isEmpty || kPassword.isEmpty) {
+      // ignore: avoid_print
+      print('[captures] pas d\'identifiants fournis, arrêt avant connexion');
+      return;
+    }
+    if (champs.evaluate().length < 2) {
+      // ignore: avoid_print
+      print('[captures] champs de saisie introuvables');
+      return;
+    }
+
+    await tester.enterText(champs.at(0), kEmail);
+    await patienter(1);
+    await tester.enterText(champs.at(1), kPassword);
+    await patienter(1);
+
+    final seConnecter = find.textContaining(
+      RegExp('connexion|connecter', caseSensitive: false),
+    );
+    if (seConnecter.evaluate().isEmpty) {
+      // ignore: avoid_print
+      print('[captures] bouton de connexion introuvable');
+      return;
+    }
+    await tester.tap(seConnecter.last, warnIfMissed: false);
+
+    // --- Écrans connectés -------------------------------------------------
+    final navBar = find.byType(BottomNavigationBar);
+    if (!await attendre(navBar, secondes: 60)) {
+      // ignore: avoid_print
+      print('[captures] connexion non aboutie');
+      await capturer('06_apres_connexion');
+      return;
+    }
+    await patienter(5);
+    await capturer('06_accueil_connecte');
+
+    final icones = find.descendant(of: navBar.first, matching: find.byType(Icon));
+    final total = icones.evaluate().length;
+    for (var i = 1; i < total && i < 4; i++) {
+      await tester.tap(icones.at(i), warnIfMissed: false);
+      await patienter(6);
+      await capturer('0${6 + i}_onglet_$i');
+    }
+  }, timeout: const Timeout(Duration(minutes: 15)));
 }

@@ -1,17 +1,4 @@
-import 'dart:io';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:http/io_client.dart';
-
-/// HttpFileService avec bypass SSL (certificat intermédiaire manquant sur certains serveurs)
-class _SslBypassFileService extends HttpFileService {
-  _SslBypassFileService()
-      : super(
-          httpClient: IOClient(
-            HttpClient()
-              ..badCertificateCallback = (cert, host, port) => true,
-          ),
-        );
-}
 
 /// Service de gestion du cache d'images optimisé pour les performances
 /// 
@@ -40,8 +27,6 @@ class ImageCacheService {
       // Nettoyage automatique quand le cache dépasse la limite
       repo: JsonCacheInfoRepository(databaseName: key),
       
-      // Stockage sur disque (persistant)
-      fileService: _SslBypassFileService(),
     ),
   );
 
@@ -58,7 +43,6 @@ class ImageCacheService {
       maxNrOfCacheObjects: 100,
       
       repo: JsonCacheInfoRepository(databaseName: tempKey),
-      fileService: _SslBypassFileService(),
     ),
   );
 

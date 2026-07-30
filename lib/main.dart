@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:siade2/l10n/app_localizations.dart';
@@ -25,17 +24,7 @@ import 'package:siade2/src/core/services/notification_service.dart';
 import 'package:siade2/src/core/services/app_logger.dart';
 import 'package:siade2/src/core/services/background_task_service.dart';
 
-// Bypass SSL pour les images réseau (certificat intermédiaire manquant sur le serveur)
-class _SslBypassOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback = (cert, host, port) => true;
-  }
-}
-
 void main() async {
-  HttpOverrides.global = _SslBypassOverrides();
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   await Firebase.initializeApp(

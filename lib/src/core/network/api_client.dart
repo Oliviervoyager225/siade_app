@@ -1,7 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siade2/src/core/constants/api_constants.dart';
 import 'package:flutter/foundation.dart'; // Import for debugPrint
@@ -33,13 +31,6 @@ class ApiClient {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    };
-
-    // Ignorer les erreurs SSL (nécessaire pour certains serveurs de test sur mobile physique)
-    (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final client = HttpClient();
-      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-      return client;
     };
 
     // Ajout de l'intercepteur pour les tokens

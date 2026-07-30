@@ -107,9 +107,6 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # Apple met souvent 15 à 30 min à traiter un binaire ; la valeur par
-        # défaut (10 min) fait échouer l'étape alors que l'envoi a réussi.
-        max_build_processing_wait: 45
         submit_to_app_store: false
       email:
         recipients:

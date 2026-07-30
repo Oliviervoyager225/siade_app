@@ -11,12 +11,9 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       <<: *env_versions
-      vars:
-        # Identifiants d'un compte de test, définis dans le groupe de variables
-        # Codemagic `screenshots` (chiffrés). Sans eux, seuls les écrans
-        # d'accueil et de connexion sont capturés.
-        SCREENSHOT_EMAIL: ""
-        SCREENSHOT_PASSWORD: ""
+      # SCREENSHOT_EMAIL et SCREENSHOT_PASSWORD (identifiants d'un compte de
+      # test) proviennent du groupe de variables Codemagic `screenshots`.
+      # Sans eux, seuls les écrans d'accueil et de connexion sont capturés.
       groups:
         - screenshots
     scripts:

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:siade2/main.dart' as app;
+import 'package:siade2/src/features/home/pages/app_layout.dart';
 import 'package:siade2/src/features/login/widgets/widgets.dart';
 
 /// Génère les captures d'écran App Store Connect.
@@ -119,22 +120,33 @@ void main() {
     await tester.tap(seConnecter.last, warnIfMissed: false);
 
     // --- Écrans connectés -------------------------------------------------
-    final navBar = find.byType(BottomNavigationBar);
-    if (!await attendre(navBar, secondes: 60)) {
+    // On attend AppLayout lui-même plutôt que sa barre de navigation : celle-ci
+    // est un NavigationBar Material 3, et guetter un BottomNavigationBar
+    // faisait échouer l'étape alors que la connexion avait réussi.
+    if (!await attendre(find.byType(AppLayout), secondes: 60)) {
       // ignore: avoid_print
       print('[captures] connexion non aboutie');
       // Préfixe `debug_` : capture de diagnostic, pas destinée à l'App Store.
       await capturer('debug_apres_connexion');
       return;
     }
-    await patienter(5);
+    // Les écrans connectés chargent leurs données par le réseau.
+    await patienter(10);
     await capturer('05_accueil_connecte');
 
-    final icones = find.descendant(of: navBar.first, matching: find.byType(Icon));
-    final total = icones.evaluate().length;
+    // Les destinations de la barre sont des GestureDetector personnalisés.
+    final navBar = find.byType(NavigationBar);
+    if (navBar.evaluate().isEmpty) return;
+    final onglets = find.descendant(
+      of: navBar.first,
+      matching: find.byType(GestureDetector),
+    );
+    final total = onglets.evaluate().length;
+    // ignore: avoid_print
+    print('[captures] $total onglets détectés');
     for (var i = 1; i < total && i < 5; i++) {
-      await tester.tap(icones.at(i), warnIfMissed: false);
-      await patienter(6);
+      await tester.tap(onglets.at(i), warnIfMissed: false);
+      await patienter(8);
       await capturer('0${5 + i}_onglet_$i');
     }
   }, timeout: const Timeout(Duration(minutes: 15)));

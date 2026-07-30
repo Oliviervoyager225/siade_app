@@ -20,20 +20,34 @@ workflows:
       - name: Dépendances
         script: flutter pub get
 
-      - name: Démarrer un simulateur 6,5 pouces
+      - name: Démarrer un simulateur grand format
         script: |
           set -e
-          # 1284 × 2778 et 1242 × 2688 sont les deux formats acceptés par Apple
-          # pour l'emplacement 6,5". On prend le premier modèle disponible.
-          for MODELE in "iPhone 14 Plus" "iPhone 15 Plus" "iPhone 16 Plus" "iPhone 11 Pro Max"; do
-            UDID=$(xcrun simctl list devices available | grep -m1 "^    $MODELE (" | grep -oE '[0-9A-F-]{36}' || true)
+          # On vise le plus grand iPhone disponible : sa capture est ensuite
+          # ramenée à 1284 × 2778, l'un des deux formats acceptés par Apple
+          # pour l'emplacement 6,5". La liste des modèles change à chaque
+          # version de Xcode, d'où le repli sur n'importe quel iPhone.
+          UDID=""
+          trouver() {
+            xcrun simctl list devices available \
+              | grep -m1 "^ *$1 (" \
+              | grep -oE '[0-9A-F-]{36}' || true
+          }
+          for MODELE in "iPhone 17 Pro Max" "iPhone 16 Pro Max" "iPhone 15 Pro Max" \
+                        "iPhone 14 Plus" "iPhone 11 Pro Max"; do
+            UDID=$(trouver "$MODELE")
             if [ -n "$UDID" ]; then
               echo "Simulateur retenu : $MODELE ($UDID)"
               break
             fi
           done
           if [ -z "$UDID" ]; then
-            echo "Aucun simulateur 6,5 pouces disponible :" >&2
+            LIGNE=$(xcrun simctl list devices available | grep -m1 "^ *iPhone " || true)
+            UDID=$(echo "$LIGNE" | grep -oE '[0-9A-F-]{36}' || true)
+            [ -n "$UDID" ] && echo "Repli sur :$(echo "$LIGNE" | sed 's/(.*//')"
+          fi
+          if [ -z "$UDID" ]; then
+            echo "Aucun simulateur iPhone disponible :" >&2
             xcrun simctl list devices available >&2
             exit 1
           fi

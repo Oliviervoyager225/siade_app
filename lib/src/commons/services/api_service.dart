@@ -5,7 +5,7 @@ class ApiService {
   final Dio _dio = Dio();
   
   // Base URL - Ajout du slash final pour une résolution correcte
-  static const String baseUrl = 'https://siade.ci/api/';
+  static const String baseUrl = 'https://siade.online/api/';
 
   ApiService() {
     _dio.options.baseUrl = baseUrl;

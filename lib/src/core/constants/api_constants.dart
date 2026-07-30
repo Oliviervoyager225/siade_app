@@ -1,5 +1,5 @@
 class ApiConstants {
-  static const String baseUrl = 'https://siade.ci';
+  static const String baseUrl = 'https://siade.online';
 
   // Auth
   static const String login = '$baseUrl/api/login/';

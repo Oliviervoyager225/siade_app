@@ -36,6 +36,19 @@
 		</array>
 		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
+		<!-- REVERSED_CLIENT_ID de GoogleService-Info.plist : sans ce schéma,
+		     le retour d'authentification Google Sign-In ne revient pas à l'app. -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.595661721350-9l7jvfd7av8uun313mfsq4o2jjek8ri9</string>
+				</array>
+			</dict>
+		</array>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
 		<key>UIApplicationSupportsIndirectInputEvents</key>

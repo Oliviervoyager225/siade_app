@@ -17,6 +17,7 @@ import 'package:siade2/src/core/local/connectivity_service.dart';
 import 'package:siade2/src/core/local/local_database.dart';
 import 'package:siade2/src/core/local/sync_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:siade2/firebase_options.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:siade2/src/core/services/asset_optimization_service.dart';
@@ -37,7 +38,9 @@ void main() async {
   HttpOverrides.global = _SslBypassOverrides();
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // 🔥 Initialiser Firebase Crashlytics (checklist point 9)
   // En prod : tous les crashs Flutter + Dart sont capturés automatiquement

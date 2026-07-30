@@ -1,12 +1,1 @@
-{
-  "firestore": {
-    "database": "native-db",
-    "location": "europe-west9",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs20"
-  }
-}
+{"firestore":{"database":"native-db","location":"europe-west9","rules":"firestore.rules","indexes":"firestore.indexes.json"},"functions":{"source":"functions","runtime":"nodejs20"},"flutter":{"platforms":{"android":{"default":{"projectId":"siade-2026","appId":"1:595661721350:android:dcc0d869baf66624a35887","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"siade-2026","configurations":{"android":"1:595661721350:android:dcc0d869baf66624a35887","ios":"1:595661721350:ios:aecddecfb77aacf6a35887"}}}}}}

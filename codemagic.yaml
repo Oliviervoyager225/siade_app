@@ -1,0 +1,122 @@
+definitions:
+  env_versions: &env_versions
+    flutter: stable
+    xcode: latest
+    cocoapods: default
+
+workflows:
+  ios-screenshots:
+    name: iOS - captures App Store
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      <<: *env_versions
+      vars:
+        # Identifiants d'un compte de test, définis dans le groupe de variables
+        # Codemagic `screenshots` (chiffrés). Sans eux, seuls les écrans
+        # d'accueil et de connexion sont capturés.
+        SCREENSHOT_EMAIL: ""
+        SCREENSHOT_PASSWORD: ""
+      groups:
+        - screenshots
+    scripts:
+      - name: Dépendances
+        script: flutter pub get
+
+      - name: Démarrer un simulateur 6,5 pouces
+        script: |
+          set -e
+          # 1284 × 2778 et 1242 × 2688 sont les deux formats acceptés par Apple
+          # pour l'emplacement 6,5". On prend le premier modèle disponible.
+          for MODELE in "iPhone 14 Plus" "iPhone 15 Plus" "iPhone 16 Plus" "iPhone 11 Pro Max"; do
+            UDID=$(xcrun simctl list devices available | grep -m1 "^    $MODELE (" | grep -oE '[0-9A-F-]{36}' || true)
+            if [ -n "$UDID" ]; then
+              echo "Simulateur retenu : $MODELE ($UDID)"
+              break
+            fi
+          done
+          if [ -z "$UDID" ]; then
+            echo "Aucun simulateur 6,5 pouces disponible :" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          echo "SIM_UDID=$UDID" >> $CM_ENV
+
+      - name: Générer les captures
+        script: |
+          set -e
+          flutter drive \
+            --driver=test_driver/integration_test.dart \
+            --target=integration_test/screenshots_test.dart \
+            -d "$SIM_UDID" \
+            --dart-define=SCREENSHOT_EMAIL="$SCREENSHOT_EMAIL" \
+            --dart-define=SCREENSHOT_PASSWORD="$SCREENSHOT_PASSWORD"
+
+      - name: Normaliser au format App Store
+        script: |
+          set -e
+          if [ -z "$(ls -A screenshots 2>/dev/null)" ]; then
+            echo "Aucune capture produite." >&2
+            exit 1
+          fi
+          # Apple refuse tout écart d'un seul pixel : on force la taille exacte.
+          for f in screenshots/*.png; do
+            sips --resampleHeightWidth 2778 1284 "$f" >/dev/null
+            echo "$f -> $(sips -g pixelWidth -g pixelHeight "$f" | tail -2 | tr -d ' \n')"
+          done
+    artifacts:
+      - screenshots/*.png
+    publishing:
+      email:
+        recipients:
+          - olivier.dakouri25@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  ios-release:
+    name: iOS - build et publication App Store
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      # Nom de la clé App Store Connect enregistrée dans
+      # Codemagic > Teams/Personal Account > Integrations > Developer Portal.
+      app_store_connect: SiadeAppStoreKey
+    environment:
+      <<: *env_versions
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.sahanalytics.siadeapp
+    scripts:
+      - name: Dépendances
+        script: flutter pub get
+
+      - name: Profils de signature
+        script: |
+          set -e
+          xcode-project use-profiles
+
+      - name: Build IPA
+        script: |
+          set -e
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # Apple met souvent 15 à 30 min à traiter un binaire ; la valeur par
+        # défaut (10 min) fait échouer l'étape alors que l'envoi a réussi.
+        max_build_processing_wait: 45
+        submit_to_app_store: false
+      email:
+        recipients:
+          - olivier.dakouri25@gmail.com
+        notify:
+          success: true
+          failure: true

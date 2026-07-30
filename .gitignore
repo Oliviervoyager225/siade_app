@@ -54,3 +54,6 @@ android/app/upload-keystore.jks
 # Node.js
 node_modules/
 functions/node_modules/
+
+# Captures generees par le workflow ios-screenshots
+/screenshots/

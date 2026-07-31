@@ -106,11 +106,15 @@ class FirebaseAuthService {
 
       final user = credential.user;
       if (user != null) {
-        // Créer le doc Firestore s'il n'existe pas encore
-        await _createOrUpdateUserDocument(user, isGoogleSignIn: false);
-        await NotificationService()
-            .refreshTokenForCurrentUser()
-            .timeout(_delaiFirestore, onTimeout: () {});
+        // L'utilisateur est authentifié dès cet instant : la synchronisation
+        // Firestore et le jeton de notification se font en arrière-plan. Les
+        // attendre ajoutait jusqu'à 45 s au retour de cette méthode quand
+        // Firestore ne répond pas, dépassant le délai posé par l'appelant, qui
+        // prenait alors une connexion réussie pour des identifiants invalides.
+        unawaited(_createOrUpdateUserDocument(user, isGoogleSignIn: false));
+        unawaited(
+          NotificationService().refreshTokenForCurrentUser().catchError((_) {}),
+        );
       }
       print('✅ Firebase: Connexion réussie - ${user?.uid}');
       return user;
@@ -163,11 +167,11 @@ class FirebaseAuthService {
       final user = userCredential.user;
 
       if (user != null) {
-        // Créer/mettre à jour le document utilisateur dans Firestore
-        await _createOrUpdateUserDocument(user, isGoogleSignIn: true);
-        await NotificationService()
-            .refreshTokenForCurrentUser()
-            .timeout(_delaiFirestore, onTimeout: () {});
+        // Même raison que pour la connexion e-mail : Firestore en arrière-plan.
+        unawaited(_createOrUpdateUserDocument(user, isGoogleSignIn: true));
+        unawaited(
+          NotificationService().refreshTokenForCurrentUser().catchError((_) {}),
+        );
 
         print('✅ Firebase: Connexion Google réussie - ${user.uid}');
         return user;

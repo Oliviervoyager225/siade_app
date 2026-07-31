@@ -92,9 +92,10 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      # Nom de la clé App Store Connect enregistrée dans
-      # Codemagic > Teams/Personal Account > Integrations > Developer Portal.
-      app_store_connect: SiadeAppStoreKey
+      # Clé enregistrée dans Codemagic > Settings > Integrations >
+      # Developer Portal (Key ID W9FQY89LCJ). Codemagic résout le Key ID et
+      # la clé privée à partir de ce nom.
+      app_store_connect: Codemagic2026
     environment:
       <<: *env_versions
       ios_signing:

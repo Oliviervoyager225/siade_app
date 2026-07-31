@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -7,6 +9,16 @@ import 'notification_service.dart';
 /// Service pour gérer l'authentification Firebase
 /// Supporte Email/Password et Google Sign-In
 class FirebaseAuthService {
+  /// Délai au-delà duquel une écriture Firestore est abandonnée.
+  ///
+  /// Le SDK Firestore ne lève pas d'exception quand le serveur refuse ou reste
+  /// injoignable : il conserve l'écriture en attente et réessaie sans fin. Le
+  /// `Future` ne se termine donc jamais, aucun `catch` ne se déclenche, et
+  /// l'écran appelant reste figé sur son indicateur de chargement. Cette borne
+  /// laisse l'inscription s'achever côté Django même si Firestore ne répond
+  /// pas ; la donnée manquante sera recréée à la prochaine connexion.
+  static const Duration _delaiFirestore = Duration(seconds: 15);
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     // Web client ID (from google-services.json → oauth_client where client_type == 3)
@@ -51,7 +63,9 @@ class FirebaseAuthService {
 
         // Créer le document utilisateur dans Firestore
         await _createUserDocument(updatedUser, userData);
-        await NotificationService().refreshTokenForCurrentUser();
+        await NotificationService()
+            .refreshTokenForCurrentUser()
+            .timeout(_delaiFirestore, onTimeout: () {});
 
         print('✅ Firebase: Compte créé avec succès - ${updatedUser.uid}');
         return updatedUser;
@@ -94,7 +108,9 @@ class FirebaseAuthService {
       if (user != null) {
         // Créer le doc Firestore s'il n'existe pas encore
         await _createOrUpdateUserDocument(user, isGoogleSignIn: false);
-        await NotificationService().refreshTokenForCurrentUser();
+        await NotificationService()
+            .refreshTokenForCurrentUser()
+            .timeout(_delaiFirestore, onTimeout: () {});
       }
       print('✅ Firebase: Connexion réussie - ${user?.uid}');
       return user;
@@ -149,7 +165,9 @@ class FirebaseAuthService {
       if (user != null) {
         // Créer/mettre à jour le document utilisateur dans Firestore
         await _createOrUpdateUserDocument(user, isGoogleSignIn: true);
-        await NotificationService().refreshTokenForCurrentUser();
+        await NotificationService()
+            .refreshTokenForCurrentUser()
+            .timeout(_delaiFirestore, onTimeout: () {});
 
         print('✅ Firebase: Connexion Google réussie - ${user.uid}');
         return user;
@@ -202,9 +220,12 @@ class FirebaseAuthService {
         'provider': 'email',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }).timeout(_delaiFirestore);
 
       print('✅ Firestore: Document utilisateur créé - ${user.uid}');
+    } on TimeoutException {
+      print('⚠️ Firestore injoignable, document utilisateur non créé pour '
+          '${user.uid}. L\'inscription se poursuit sans lui.');
     } catch (e) {
       print('❌ Erreur création Firestore: $e');
     }
@@ -217,7 +238,7 @@ class FirebaseAuthService {
   }) async {
     try {
       final userDocRef = _firestore.collection('users').doc(user.uid);
-      final userDoc = await userDocRef.get();
+      final userDoc = await userDocRef.get().timeout(_delaiFirestore);
 
       if (userDoc.exists) {
         // Utilisateur existe, mettre à jour
@@ -225,7 +246,7 @@ class FirebaseAuthService {
           'displayName': user.displayName,
           'photoURL': user.photoURL,
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }).timeout(_delaiFirestore);
         print('✅ Firestore: Document utilisateur mis à jour - ${user.uid}');
       } else {
         // Nouvel utilisateur, créer le document
@@ -244,9 +265,12 @@ class FirebaseAuthService {
           'provider': isGoogleSignIn ? 'google' : 'email',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }).timeout(_delaiFirestore);
         print('✅ Firestore: Document utilisateur créé - ${user.uid}');
       }
+    } on TimeoutException {
+      print('⚠️ Firestore injoignable, profil non synchronisé pour '
+          '${user.uid}. La connexion se poursuit sans lui.');
     } catch (e) {
       print('❌ Erreur Firestore: $e');
     }
@@ -258,9 +282,12 @@ class FirebaseAuthService {
       await _firestore.collection('users').doc(firebaseUid).update({
         'djangoUserId': djangoUserId,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }).timeout(_delaiFirestore);
 
       print('✅ Firestore: Django User ID mis à jour - Firebase UID: $firebaseUid → Django ID: $djangoUserId');
+    } on TimeoutException {
+      print('⚠️ Firestore injoignable, lien Django non enregistré pour '
+          '$firebaseUid.');
     } catch (e) {
       print('❌ Erreur mise à jour Django ID: $e');
     }
@@ -269,7 +296,10 @@ class FirebaseAuthService {
   /// Récupérer les données utilisateur depuis Firestore
   Future<Map<String, dynamic>?> getUserData(String uid) async {
     try {
-      final doc = await _firestore.collection('users').doc(uid).get();
+      final doc =
+          await _firestore.collection('users').doc(uid).get().timeout(
+                _delaiFirestore,
+              );
       if (doc.exists) {
         return doc.data();
       }

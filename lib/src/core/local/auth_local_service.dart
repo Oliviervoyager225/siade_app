@@ -65,10 +65,24 @@ class AuthLocalService {
     if (response.statusCode == 200) {
       final data = response.data as Map<String, dynamic>;
 
+      // Le backend répond en HTTP 200 même quand il refuse la connexion, le
+      // vrai code étant dans le corps (`{"status":400,"message":...}`). Sans
+      // ce contrôle, `access` est nul, saveTokens lève une erreur de type, et
+      // le catch appelant bascule sur l'authentification locale : l'échec
+      // remonte alors en « serveur injoignable » et le message est perdu.
+      final access = data['access'];
+      if (access is! String) {
+        debugPrint(
+          '[AuthLocalService] Connexion refusée par le serveur: '
+          '${data['message'] ?? data}',
+        );
+        return null;
+      }
+
       // Sauvegarder les tokens JWT
       await _apiClient.saveTokens(
-        access: data['access'],
-        refresh: data['refresh'],
+        access: access,
+        refresh: data['refresh'] as String?,
       );
 
       // Mise à jour des tokens dans la BDD locale si l'utilisateur existe
@@ -78,7 +92,7 @@ class AuthLocalService {
       if (localUser != null) {
         await _localDb.updateUserTokens(
           email: localUser['email'] as String,
-          accessToken: data['access'] as String,
+          accessToken: access,
           refreshToken: data['refresh'] as String?,
         );
       }

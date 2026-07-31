@@ -14,16 +14,23 @@ class ConnectivityService extends ChangeNotifier {
 
   StreamSubscription? _subscription;
 
+  /// Considère l'appareil en ligne dès qu'un transport existe.
+  ///
+  /// Lister les transports acceptés (wifi/mobile/ethernet) déclarait hors
+  /// ligne tout ce qui sort de cette liste : `vpn`, `bluetooth`, et surtout
+  /// `other`, que renvoient les simulateurs iOS. L'app basculait alors sur
+  /// son authentification locale sans jamais joindre le serveur. Seuls une
+  /// liste vide ou `none` signifient réellement une absence de réseau.
+  static bool _enLigne(List<ConnectivityResult> resultats) {
+    if (resultats.isEmpty) return false;
+    return resultats.any((r) => r != ConnectivityResult.none);
+  }
+
   void _init() {
     _subscription = Connectivity().onConnectivityChanged.listen(
       (List<ConnectivityResult> results) {
         final wasOnline = _isOnline;
-        _isOnline = results.any(
-          (r) =>
-              r == ConnectivityResult.wifi ||
-              r == ConnectivityResult.mobile ||
-              r == ConnectivityResult.ethernet,
-        );
+        _isOnline = _enLigne(results);
         if (_isOnline != wasOnline) {
           debugPrint(
             '[ConnectivityService] Statut réseau: ${_isOnline ? "EN LIGNE" : "HORS LIGNE"}',
@@ -39,23 +46,15 @@ class ConnectivityService extends ChangeNotifier {
 
   Future<void> _checkInitialConnectivity() async {
     final results = await Connectivity().checkConnectivity();
-    _isOnline = results.any(
-      (r) =>
-          r == ConnectivityResult.wifi ||
-          r == ConnectivityResult.mobile ||
-          r == ConnectivityResult.ethernet,
-    );
+    _isOnline = _enLigne(results);
     notifyListeners();
   }
 
   Future<bool> checkNow() async {
     final results = await Connectivity().checkConnectivity();
-    _isOnline = results.any(
-      (r) =>
-          r == ConnectivityResult.wifi ||
-          r == ConnectivityResult.mobile ||
-          r == ConnectivityResult.ethernet,
-    );
+    _isOnline = _enLigne(results);
+    debugPrint('[ConnectivityService] checkNow: $results → '
+        '${_isOnline ? "EN LIGNE" : "HORS LIGNE"}');
     return _isOnline;
   }
 

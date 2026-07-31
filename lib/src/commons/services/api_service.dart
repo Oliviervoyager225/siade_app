@@ -49,9 +49,11 @@ class ApiService {
   }
 
   // --- Authentification ---
+  // Le backend attend `username` : envoyer `email` lui fait répondre
+  // « Username n'est pas present ! » avec un corps d'erreur en HTTP 200.
   Future<Response> login(String email, String password) async {
     return await _dio.post('login/', data: {
-      'email': email,
+      'username': email,
       'password': password,
     });
   }

@@ -119,6 +119,12 @@ void main() {
     }
     await tester.tap(seConnecter.last, warnIfMissed: false);
 
+    // En cas d'échec, _handleLogin affiche un SnackBar rouge qui s'efface au
+    // bout de quelques secondes. On le saisit tout de suite : c'est lui qui
+    // porte le message d'erreur exact.
+    await patienter(4);
+    await capturer('debug_juste_apres_tap');
+
     // --- Écrans connectés -------------------------------------------------
     // On attend AppLayout lui-même plutôt que sa barre de navigation : celle-ci
     // est un NavigationBar Material 3, et guetter un BottomNavigationBar

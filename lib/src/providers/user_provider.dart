@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -243,7 +245,21 @@ class UserProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+    try {
+      return await _login(username, password);
+    } finally {
+      // Garde-fou : quel que soit le chemin de sortie, l'écran ne doit jamais
+      // rester bloqué sur son indicateur de chargement. Le bouton de connexion
+      // est remplacé par un spinner tant que _isLoading vaut true, sans aucun
+      // moyen pour l'utilisateur de réessayer.
+      if (_isLoading) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
 
+  Future<bool> _login(String username, String password) async {
     // 1. Try Django/local auth first
     Map<String, dynamic>? data;
     try {
@@ -273,10 +289,15 @@ class UserProvider extends ChangeNotifier {
 
     // 2. Fallback: Firebase Auth (for users registered via signupFirebase)
     try {
-      final firebaseUser = await _firebaseAuthService.signInWithEmailAndPassword(
-        email: username,
-        password: password,
-      );
+      // Contrairement à Dio, firebase_auth n'impose aucun délai maximal : sans
+      // cette borne, un appel resté suspendu laissait _isLoading à true et
+      // l'écran de connexion figé sur son indicateur, sans message ni retour.
+      final firebaseUser = await _firebaseAuthService
+          .signInWithEmailAndPassword(
+            email: username,
+            password: password,
+          )
+          .timeout(const Duration(seconds: 20));
       if (firebaseUser != null) {
         final nameParts = firebaseUser.displayName?.split(' ') ?? [];
         _user = {

@@ -98,16 +98,24 @@ workflows:
       app_store_connect: Codemagic2026
     environment:
       <<: *env_versions
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.sahanalytics.siadeapp
+      vars:
+        BUNDLE_ID: com.sahanalytics.siadeapp
     scripts:
       - name: Dépendances
         script: flutter pub get
 
-      - name: Profils de signature
+      - name: Certificat et profil de signature
         script: |
           set -e
+          # Le bloc déclaratif `ios_signing` ne fait que récupérer un profil
+          # existant : il échoue tant qu'aucun profil App Store n'a été créé
+          # pour ce bundle. `--create` le génère au besoin, ainsi que le
+          # certificat de distribution s'il manque.
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
           xcode-project use-profiles
 
       - name: Build IPA

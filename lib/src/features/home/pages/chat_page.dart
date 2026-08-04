@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:siade2/src/commons/widgets/optimized_image.dart';
 import 'package:siade2/src/core/services/chat_service.dart';
+import 'package:siade2/src/core/services/moderation_service.dart';
 import 'package:siade2/src/features/home/pages/conversation_page.dart';
 import 'package:siade2/src/features/home/pages/users_list_page.dart';
 import 'package:siade2/src/theme/colors/app_colors.dart';
@@ -339,6 +340,13 @@ class _ChatPageState extends State<ChatPage> {
                       }
 
                       var docs = snap.data?.docs ?? [];
+
+                      // Les conversations avec un utilisateur bloqué
+                      // disparaissent de la liste.
+                      docs = docs
+                          .where((d) => !ModerationService()
+                              .estBloque(_otherUid(d.data())))
+                          .toList();
 
                       // Filtre par recherche
                       if (_query.isNotEmpty) {

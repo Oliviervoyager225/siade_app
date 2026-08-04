@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:siade2/src/commons/widgets/optimized_image.dart';
+import 'package:siade2/src/features/home/pages/blocked_users_page.dart';
 import 'package:provider/provider.dart';
 import 'package:siade2/l10n/app_localizations.dart';
 import 'package:siade2/src/features/home/pages/pages.dart';
@@ -331,6 +333,46 @@ class _CustomDrawerState extends State<CustomDrawer> {
                             ),
                           ),
                         ),
+                        // Sécurité et confidentialité : Apple attend un accès
+                        // à ces trois écrans depuis l'app elle-même.
+                        _buildMenuItem(
+                          Icon(
+                            Icons.block,
+                            color: isLight
+                                ? const Color(0xFF423B69)
+                                : Colors.white,
+                            size: 22,
+                          ),
+                          'Comptes bloqués',
+                          isLight,
+                          () => ouvrirComptesBloques(context),
+                        ),
+                        _buildMenuItem(
+                          Icon(
+                            Icons.privacy_tip_outlined,
+                            color: isLight
+                                ? const Color(0xFF423B69)
+                                : Colors.white,
+                            size: 22,
+                          ),
+                          'Confidentialité',
+                          isLight,
+                          () => _ouvrirLien(
+                              'https://siade.online/confidentialite.html'),
+                        ),
+                        _buildMenuItem(
+                          Icon(
+                            Icons.description_outlined,
+                            color: isLight
+                                ? const Color(0xFF423B69)
+                                : Colors.white,
+                            size: 22,
+                          ),
+                          'Conditions d\'utilisation',
+                          isLight,
+                          () => _ouvrirLien(
+                              'https://siade.online/conditions.html'),
+                        ),
                         _buildMenuItem(
                           const Icon(
                             Icons.logout,
@@ -490,6 +532,15 @@ class _CustomDrawerState extends State<CustomDrawer> {
         ),
       ),
     );
+  }
+
+  Future<void> _ouvrirLien(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[CustomDrawer] Ouverture de $url impossible: $e');
+    }
   }
 
   Widget _buildMenuItem(

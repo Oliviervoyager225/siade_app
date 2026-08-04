@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:siade2/src/features/home/widgets/widgets.dart';
 import 'package:siade2/src/theme/colors/app_colors.dart';
 import 'package:siade2/src/core/services/post_service.dart';
+import 'package:siade2/src/core/services/moderation_service.dart';
 import 'package:siade2/src/features/socialnetwork/pages/create_post_page.dart';
 import '../../../commons/data/models.dart';
 
@@ -33,9 +34,19 @@ class Feed extends StatefulWidget {
 
 class _FeedState extends State<Feed> {
   final PostService _postService = PostService();
+  final ModerationService _moderation = ModerationService();
 
   @override
   Widget build(BuildContext context) {
+    // Le fil se reconstruit dès qu'un blocage ou un signalement a lieu, pour
+    // que le contenu concerné disparaisse sans attendre le prochain snapshot.
+    return ListenableBuilder(
+      listenable: _moderation,
+      builder: (context, _) => _construireFil(context),
+    );
+  }
+
+  Widget _construireFil(BuildContext context) {
     return StreamBuilder<List<Post>>(
       stream: _postService.getPostsStream(),
       builder: (context, snapshot) {
@@ -76,8 +87,17 @@ class _FeedState extends State<Feed> {
           );
         }
 
+        // Publications des utilisateurs bloqués et contenus signalés retirés
+        // avant tout affichage, y compris avant l'état « aucune publication ».
+        final visibles = (snapshot.data ?? const <Post>[])
+            .where((p) => _moderation.estVisible(
+                  auteurId: p.userId,
+                  contenuId: p.id,
+                ))
+            .toList();
+
         // Aucun post disponible
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        if (!snapshot.hasData || visibles.isEmpty) {
           return Center(
             child: GestureDetector(
               onTap: () {
@@ -136,9 +156,8 @@ class _FeedState extends State<Feed> {
         }
 
         // Affichage des posts
-        final posts = snapshot.data!;
         return Column(
-          children: posts.map((post) {
+          children: visibles.map((post) {
             return Column(
               children: [
                 Padding(

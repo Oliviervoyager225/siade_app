@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:siade2/src/core/services/asset_optimization_service.dart';
 import 'package:siade2/src/core/services/notification_service.dart';
 import 'package:siade2/src/core/services/app_logger.dart';
+import 'package:siade2/src/core/services/moderation_service.dart';
 import 'package:siade2/src/core/services/background_task_service.dart';
 
 void main() async {
@@ -56,6 +57,10 @@ void main() async {
 
   // 💾 Initialiser la BDD locale au démarrage
   await LocalDatabase().database;
+
+  // 🛡️ Charger les blocages et les contenus signalés avant le premier écran,
+  // pour qu'aucun contenu masqué n'apparaisse même brièvement.
+  await ModerationService().charger();
 
   // 🔋 Initialiser WorkManager (checklist point 12 — Xiaomi/Tecno/Infinix)
   await BackgroundTaskService().init();

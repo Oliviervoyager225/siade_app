@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:siade2/src/core/services/post_service.dart';
 import 'package:siade2/src/commons/data/models/posts.dart';
+import 'package:siade2/src/commons/widgets/moderation_actions.dart';
 import 'package:siade2/src/features/home/pages/comments_page.dart';
 import 'package:siade2/src/utils/utils.dart';
 
@@ -276,6 +277,19 @@ class _PostsState extends State<Posts> with SingleTickerProviderStateMixin {
               title: const Text('Supprimer', style: TextStyle(color: Colors.redAccent)),
               onTap: () { Navigator.pop(context); _askDelete(context); },
             ),
+          // Signalement et blocage : exigés par la règle 1.2 de l'App Store
+          // pour tout contenu publié par un utilisateur.
+          if (!isOwner) ...[
+            const Divider(color: _kDarkDivider, height: 1),
+            ...ModerationActions.entreesMenu(
+              context,
+              contenuId: post.id ?? '',
+              typeContenu: 'publication',
+              auteurId: post.userId,
+              auteurNom: post.namePoster,
+              onAvant: () => Navigator.pop(context),
+            ),
+          ],
           const SizedBox(height: 8),
         ]),
       ),

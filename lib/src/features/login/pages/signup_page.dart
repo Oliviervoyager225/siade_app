@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:siade2/src/features/login/widgets/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:siade2/src/providers/providers.dart';
@@ -19,7 +20,12 @@ class _SignupPageState extends State<SignupPage> {
   final TextEditingController _organisationController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   
-  String _selectedFunction = 'ETUDIANT'; 
+  String _selectedFunction = 'ETUDIANT';
+
+  /// Acceptation explicite des conditions, exigée par la règle 1.2 de
+  /// l'App Store dès lors que l'app diffuse du contenu publié par ses
+  /// utilisateurs. Sans cette case, l'inscription est refusée.
+  bool _conditionsAcceptees = false;
 
   @override
   void dispose() {
@@ -50,6 +56,18 @@ class _SignupPageState extends State<SignupPage> {
     if (!RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+").hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Format d\'email invalide')),
+      );
+      return;
+    }
+
+    if (!_conditionsAcceptees) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Vous devez accepter les conditions d\'utilisation pour créer '
+            'un compte',
+          ),
+        ),
       );
       return;
     }
@@ -294,7 +312,10 @@ class _SignupPageState extends State<SignupPage> {
                         hint: 'Numéro de téléphone (Optionnel)',
                         keyboardType: TextInputType.phone,
                       ),
-                      SizedBox(height: 25),
+                      SizedBox(height: 18),
+
+                      _construireAcceptationConditions(isLight),
+                      SizedBox(height: 18),
 
                       Consumer<UserProvider>(
                         builder: (context, userProvider, child) {
@@ -345,5 +366,82 @@ class _SignupPageState extends State<SignupPage> {
         ],
       ),
     );
+  }
+
+  /// Case d'acceptation avec engagement explicite de ne rien publier
+  /// d'offensant, et liens vers les conditions et la politique.
+  Widget _construireAcceptationConditions(bool isLight) {
+    final couleur = isLight ? const Color(0xFF60438C) : Colors.white70;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 24,
+          width: 24,
+          child: Checkbox(
+            value: _conditionsAcceptees,
+            onChanged: (v) =>
+                setState(() => _conditionsAcceptees = v ?? false),
+            side: BorderSide(color: couleur),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'J\'accepte les ',
+                style: TextStyle(color: couleur, fontSize: 13),
+              ),
+              GestureDetector(
+                onTap: () => _ouvrirLien('https://siade.online/conditions.html'),
+                child: Text(
+                  'conditions d\'utilisation',
+                  style: TextStyle(
+                    color: couleur,
+                    fontSize: 13,
+                    decoration: TextDecoration.underline,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                ' et la ',
+                style: TextStyle(color: couleur, fontSize: 13),
+              ),
+              GestureDetector(
+                onTap: () =>
+                    _ouvrirLien('https://siade.online/confidentialite.html'),
+                child: Text(
+                  'politique de confidentialité',
+                  style: TextStyle(
+                    color: couleur,
+                    fontSize: 13,
+                    decoration: TextDecoration.underline,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                '. Je m\'engage à ne publier aucun contenu offensant, '
+                'et je comprends qu\'un tel contenu est retiré et son auteur '
+                'exclu sans délai.',
+                style: TextStyle(color: couleur, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _ouvrirLien(String url) async {
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[SignupPage] Ouverture de $url impossible: $e');
+    }
   }
 }

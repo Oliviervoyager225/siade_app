@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:siade2/src/commons/data/models/chat_message.dart';
+import 'package:siade2/src/commons/widgets/moderation_actions.dart';
 import 'package:siade2/src/commons/widgets/optimized_image.dart';
 import 'package:siade2/src/core/constants/api_constants.dart';
+import 'package:siade2/src/core/services/moderation_service.dart';
 import 'package:siade2/src/core/network/api_client.dart';
 import 'package:siade2/src/core/services/call_service.dart';
 import 'package:siade2/src/core/services/chat_service.dart';
@@ -36,6 +38,7 @@ class _ConversationPageState extends State<ConversationPage> {
   final _chat = ChatService();
   final _callSvc = CallService();
   final _apiClient = ApiClient();
+  final _moderation = ModerationService();
   final _me = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   @override
@@ -50,6 +53,48 @@ class _ConversationPageState extends State<ConversationPage> {
     _msgCtrl.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Signaler la conversation ou bloquer l'interlocuteur.
+  void _ouvrirMenuModeration() {
+    final bloque = _moderation.estBloque(widget.otherUid);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141B33),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            if (bloque)
+              ListTile(
+                leading: const Icon(Icons.lock_open, color: Colors.greenAccent),
+                title: Text(
+                  'Débloquer ${widget.otherName}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _moderation.debloquer(widget.otherUid);
+                },
+              )
+            else
+              ...ModerationActions.entreesMenu(
+                context,
+                contenuId: widget.conversationId,
+                typeContenu: 'conversation',
+                auteurId: widget.otherUid,
+                auteurNom: widget.otherName,
+                onAvant: () => Navigator.pop(sheetCtx),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -149,6 +194,14 @@ class _ConversationPageState extends State<ConversationPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Rebâtit l'écran dès qu'un blocage change d'état.
+    return ListenableBuilder(
+      listenable: _moderation,
+      builder: (context, _) => _construire(context),
+    );
+  }
+
+  Widget _construire(BuildContext context) {
     final isLight = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
@@ -201,6 +254,8 @@ class _ConversationPageState extends State<ConversationPage> {
                   const SizedBox(width: 8),
                   _circleBtn(Icons.phone_outlined, isLight,
                       () => _startCall(isVideo: false)),
+                  const SizedBox(width: 8),
+                  _circleBtn(Icons.more_vert, isLight, _ouvrirMenuModeration),
                 ],
               ),
             ),
@@ -208,6 +263,11 @@ class _ConversationPageState extends State<ConversationPage> {
 
           Divider(color: AppColors.greySecondary, height: 0.5),
 
+          // ── Interlocuteur bloqué ──
+          // Le fil et la saisie disparaissent tant que le blocage est actif.
+          if (_moderation.estBloque(widget.otherUid))
+            Expanded(child: _panneauBloque(isLight))
+          else ...[
           // ── Messages ──
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -326,7 +386,46 @@ class _ConversationPageState extends State<ConversationPage> {
               ),
             ),
           ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _panneauBloque(bool isLight) {
+    final couleurTexte = isLight ? const Color(0xFF60438C) : Colors.white;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.block, size: 48, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            Text(
+              'Vous avez bloqué ${widget.otherName}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: couleurTexte,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Vous ne recevez plus ses messages et il ne peut plus vous '
+              'contacter depuis cette conversation.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: () => _moderation.debloquer(widget.otherUid),
+              icon: const Icon(Icons.lock_open),
+              label: const Text('Débloquer'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -371,7 +371,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                           'Conditions d\'utilisation',
                           isLight,
                           () => _ouvrirLien(
-                              'https://siade.online/conditions.html'),
+                              'https://siade.online/condition.html'),
                         ),
                         _buildMenuItem(
                           const Icon(

@@ -396,7 +396,7 @@ class _SignupPageState extends State<SignupPage> {
                 style: TextStyle(color: couleur, fontSize: 13),
               ),
               GestureDetector(
-                onTap: () => _ouvrirLien('https://siade.online/conditions.html'),
+                onTap: () => _ouvrirLien('https://siade.online/condition.html'),
                 child: Text(
                   'conditions d\'utilisation',
                   style: TextStyle(

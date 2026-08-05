@@ -24,7 +24,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get networkingSubtitle => 'Connect with experts';
 
   @override
-  String get welcomeToSiade => 'Welcome to\nSIADE 2026';
+  String get welcomeToSiade => 'Welcome to\nSIADE 2027';
 
   @override
   String get discoverTechEvent => 'Discover the tech event of the year';
@@ -33,7 +33,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get readyToStart => 'Ready to start\nthe adventure?';
 
   @override
-  String get joinSiadeNow => 'Join SIADE 2026 now';
+  String get joinSiadeNow => 'Join SIADE 2027 now';
 
   @override
   String get login => 'Login';

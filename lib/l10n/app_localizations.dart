@@ -131,7 +131,7 @@ abstract class AppLocalizations {
   /// No description provided for @welcomeToSiade.
   ///
   /// In fr, this message translates to:
-  /// **'Bienvenue à\nSIADE 2026'**
+  /// **'Bienvenue à\nSIADE 2027'**
   String get welcomeToSiade;
 
   /// No description provided for @discoverTechEvent.
@@ -149,7 +149,7 @@ abstract class AppLocalizations {
   /// No description provided for @joinSiadeNow.
   ///
   /// In fr, this message translates to:
-  /// **'Rejoignez SIADE 2026 dès maintenant'**
+  /// **'Rejoignez SIADE 2027 dès maintenant'**
   String get joinSiadeNow;
 
   /// No description provided for @login.

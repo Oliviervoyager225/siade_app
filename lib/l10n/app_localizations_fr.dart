@@ -24,7 +24,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get networkingSubtitle => 'Connectez-vous avec des experts';
 
   @override
-  String get welcomeToSiade => 'Bienvenue à\nSIADE 2026';
+  String get welcomeToSiade => 'Bienvenue à\nSIADE 2027';
 
   @override
   String get discoverTechEvent => 'Découvrez l\'événement tech de l\'année';
@@ -33,7 +33,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get readyToStart => 'Prêt à commencer\nl\'aventure ?';
 
   @override
-  String get joinSiadeNow => 'Rejoignez SIADE 2026 dès maintenant';
+  String get joinSiadeNow => 'Rejoignez SIADE 2027 dès maintenant';
 
   @override
   String get login => 'Se connecter';

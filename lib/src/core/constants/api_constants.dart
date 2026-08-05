@@ -29,9 +29,11 @@ class ApiConstants {
   static const String notificationsLive = '$baseUrl/api/notifications/history/notify-live/';
   static const String notificationsCall = '$baseUrl/api/notifications/history/notify-call/';
 
-  // Dates réelles de l'événement SIADE 2026 (modifier ici si les dates changent)
-  static const String eventDay1 = '2026-04-09'; // Jour 1
-  static const String eventDay2 = '2026-04-10'; // Jour 2
+  // Dates réelles de l'événement (modifier ici si les dates changent).
+  // L'API renvoie day_of_participation "1" ou "2", que Program.fromJson
+  // convertit en date d'affichage à partir de ces deux constantes.
+  static const String eventDay1 = '2027-02-09'; // Jour 1
+  static const String eventDay2 = '2027-02-10'; // Jour 2
 
   // Media
   static const String mediaUrl = '$baseUrl/media/';

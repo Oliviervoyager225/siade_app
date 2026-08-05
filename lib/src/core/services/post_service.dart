@@ -25,6 +25,14 @@ class PostService {
   FirebaseFirestore get firestore => _firestore;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  /// Délai au-delà duquel une écriture Firestore est abandonnée.
+  ///
+  /// Firestore ne lève pas d'exception quand le serveur refuse : il met
+  /// l'écriture en attente et réessaie sans fin. Sans cette borne, l'écran de
+  /// création reste bloqué sur son indicateur de chargement, sans message ni
+  /// possibilité de revenir en arrière.
+  static const Duration _delaiFirestore = Duration(seconds: 20);
+
   // Collections Firestore
   final String postsCollection = 'posts';
   final String commentsCollection = 'comments';
@@ -54,7 +62,11 @@ class PostService {
 
       // Récupérer les infos de l'utilisateur
       print('🔵 [PostService] Récupération des données utilisateur...');
-      final userDoc = await _firestore.collection(usersCollection).doc(currentUserId).get();
+      final userDoc = await _firestore
+          .collection(usersCollection)
+          .doc(currentUserId)
+          .get()
+          .timeout(_delaiFirestore);
       
       if (!userDoc.exists) {
         print('⚠️ [PostService] Document utilisateur n\'existe pas, création avec données par défaut');
@@ -90,7 +102,8 @@ class PostService {
       print('🔵 [PostService] Upload vers Firestore collection: $postsCollection');
       final docRef = await _firestore
           .collection(postsCollection)
-          .add(firestoreData);
+          .add(firestoreData)
+          .timeout(_delaiFirestore);
 
       print('✅ [PostService] Post créé avec succès! ID: ${docRef.id}');
       return docRef.id;
@@ -303,7 +316,11 @@ class PostService {
       if (currentUserId == null) return null;
 
       // Récupérer les infos de l'utilisateur
-      final userDoc = await _firestore.collection(usersCollection).doc(currentUserId).get();
+      final userDoc = await _firestore
+          .collection(usersCollection)
+          .doc(currentUserId)
+          .get()
+          .timeout(_delaiFirestore);
       final userData = userDoc.data();
 
       final comment = Comment(
@@ -420,7 +437,11 @@ class PostService {
       final origData = origDoc.data()!;
 
       // Récupérer les infos de l'utilisateur courant
-      final userDoc = await _firestore.collection(usersCollection).doc(currentUserId).get();
+      final userDoc = await _firestore
+          .collection(usersCollection)
+          .doc(currentUserId)
+          .get()
+          .timeout(_delaiFirestore);
       final userData = userDoc.data();
       final userName  = userData?['name'] ?? userData?['displayName'] ?? 'Utilisateur';
       final userPhoto = userData?['photo'] ?? userData?['photoURL'] ?? '';

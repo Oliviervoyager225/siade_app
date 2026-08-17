@@ -23,56 +23,94 @@ class DataProvider with ChangeNotifier {
   List<Caterer> get caterers => _caterers;
   bool get isLoading => _isLoading;
 
+  /// Vrai quand le dernier chargement a échoué sur au moins une ressource.
+  ///
+  /// Sans ce drapeau, une liste vide signifiait à la fois « le serveur n'a
+  /// rien » et « le serveur est injoignable », et l'écran affichait « Aucune
+  /// donnée disponible » dans les deux cas — un message rassurant devant une
+  /// panne, sans aucun moyen de réessayer.
+  bool _echecChargement = false;
+  bool get echecChargement => _echecChargement;
+
   // ─── Charger toutes les données ─────────────────────────────────────────────
   Future<void> loadAllData() async {
     _isLoading = true;
+    _echecChargement = false;
     notifyListeners();
 
-    try {
-      final results = await Future.wait([
-        _dataService.fetchSpeakers(),
-        _dataService.fetchPrograms(),
-        _dataService.fetchArticles(),
-        _dataService.fetchExponents(),
-        _dataService.fetchCaterers(),
-      ]);
+    // Chaque ressource est chargée pour son propre compte. `Future.wait`
+    // rejetait en bloc dès la première panne : les quatre autres réponses,
+    // pourtant arrivées, étaient perdues.
+    final echecs = <String>[];
+    await Future.wait([
+      _charger('intervenants', _dataService.fetchSpeakers,
+          (v) => _speakers = v, echecs),
+      _charger('programme', _dataService.fetchPrograms,
+          (v) => _programs = v, echecs),
+      _charger('actualités', _dataService.fetchArticles,
+          (v) => _articles = v, echecs),
+      _charger('exposants', _dataService.fetchExponents,
+          (v) => _exponents = v, echecs),
+      _charger('restauration', _dataService.fetchCaterers,
+          (v) => _caterers = v, echecs),
+    ]);
 
-      _speakers = results[0] as List<Speaker>;
-      _programs = results[1] as List<Program>;
-      _articles = results[2] as List<Article>;
-      _exponents = results[3] as List<Exponent>;
-      _caterers = results[4] as List<Caterer>;
+    _echecChargement = echecs.isNotEmpty;
+    if (_echecChargement) {
+      debugPrint('DataProvider: échec sur ${echecs.join(", ")}');
+    }
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Charge une ressource et note son libellé dans [echecs] si elle tombe.
+  Future<void> _charger<T>(
+    String libelle,
+    Future<List<T>> Function() recuperer,
+    void Function(List<T>) affecter,
+    List<String> echecs,
+  ) async {
+    try {
+      affecter(await recuperer());
     } catch (e) {
-      debugPrint('Erreur DataProvider: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      echecs.add(libelle);
+      debugPrint('DataProvider: $libelle — $e');
     }
   }
 
   // ─── Refresh spécifique ────────────────────────────────────────────────────
-  Future<void> refreshSpeakers() async {
-    _speakers = await _dataService.fetchSpeakers();
-    notifyListeners();
-  }
+  // Les lectures peuvent désormais lever : ces méthodes passent par le même
+  // chemin que [loadAllData] pour qu'un rafraîchissement raté remonte dans
+  // [echecChargement] au lieu de casser l'appelant.
 
-  Future<void> refreshPrograms() async {
-    _programs = await _dataService.fetchPrograms();
-    notifyListeners();
-  }
+  Future<void> refreshSpeakers() =>
+      _rafraichir('intervenants', _dataService.fetchSpeakers,
+          (v) => _speakers = v);
 
-  Future<void> refreshArticles() async {
-    _articles = await _dataService.fetchArticles();
-    notifyListeners();
-  }
+  Future<void> refreshPrograms() =>
+      _rafraichir('programme', _dataService.fetchPrograms,
+          (v) => _programs = v);
 
-  Future<void> refreshExponents() async {
-    _exponents = await _dataService.fetchExponents();
-    notifyListeners();
-  }
+  Future<void> refreshArticles() =>
+      _rafraichir('actualités', _dataService.fetchArticles,
+          (v) => _articles = v);
 
-  Future<void> refreshCaterers() async {
-    _caterers = await _dataService.fetchCaterers();
+  Future<void> refreshExponents() =>
+      _rafraichir('exposants', _dataService.fetchExponents,
+          (v) => _exponents = v);
+
+  Future<void> refreshCaterers() =>
+      _rafraichir('restauration', _dataService.fetchCaterers,
+          (v) => _caterers = v);
+
+  Future<void> _rafraichir<T>(
+    String libelle,
+    Future<List<T>> Function() recuperer,
+    void Function(List<T>) affecter,
+  ) async {
+    final echecs = <String>[];
+    await _charger(libelle, recuperer, affecter, echecs);
+    _echecChargement = echecs.isNotEmpty;
     notifyListeners();
   }
 }

@@ -58,12 +58,16 @@ class _SpeakersState extends State<Speakers> {
               const Gap(20),
               dataProvider.isLoading
                   ? const Center(child: CircularProgressIndicator(color: Colors.white, backgroundColor: Colors.transparent))
-                  : listSpeakers.isEmpty
+                  // Une panne de chargement se distingue d'une section vide :
+                  // l'une se réessaie, l'autre est un fait.
+                  : dataProvider.echecChargement && listSpeakers.isEmpty
+                      ? const SectionIndisponible()
+                      : listSpeakers.isEmpty
                       ? Text(
                           l10n.noData,
                           style: TextStyle(
-                            color: Theme.of(context).brightness == Brightness.light 
-                                ? Colors.black54 
+                            color: Theme.of(context).brightness == Brightness.light
+                                ? Colors.black54
                                 : Colors.white70,
                           ),
                         )

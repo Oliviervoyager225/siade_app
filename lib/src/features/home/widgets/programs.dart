@@ -58,7 +58,20 @@ class _ProgramsState extends State<Programs> {
               const Gap(20),
               dataProvider.isLoading
                   ? const Center(child: CircularProgressIndicator(color: Colors.white, backgroundColor: Colors.transparent))
-                  : SizedBox(
+                  // La section n'affichait rien du tout en cas de panne : un
+                  // titre suivi d'une liste vide, sans le moindre indice.
+                  : dataProvider.echecChargement && displayPrograms.isEmpty
+                      ? const SectionIndisponible()
+                      : displayPrograms.isEmpty
+                      ? Text(
+                          l10n.noData,
+                          style: TextStyle(
+                            color: Theme.of(context).brightness == Brightness.light
+                                ? Colors.black54
+                                : Colors.white70,
+                          ),
+                        )
+                      : SizedBox(
                       height: 250,
                       child: ListView.separated(
                         separatorBuilder: (context, _) => const SizedBox(width: 10),

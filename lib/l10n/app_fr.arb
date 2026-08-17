@@ -41,6 +41,8 @@
   "noData": "Aucune donnée disponible",
   "loading": "Chargement...",
   "error": "Une erreur est survenue",
+  "loadFailed": "Contenu indisponible. Vérifiez votre connexion.",
+  "retry": "Réessayer",
   "home": "Accueil",
   "social": "Social",
   "chat": "Chat",

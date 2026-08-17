@@ -41,6 +41,8 @@
   "noData": "No data available",
   "loading": "Loading...",
   "error": "An error occurred",
+  "loadFailed": "Content unavailable. Check your connection.",
+  "retry": "Try again",
   "home": "Home",
   "social": "Social",
   "chat": "Chat",

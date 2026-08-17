@@ -132,6 +132,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get error => 'An error occurred';
 
   @override
+  String get loadFailed => 'Content unavailable. Check your connection.';
+
+  @override
+  String get retry => 'Try again';
+
+  @override
   String get home => 'Home';
 
   @override

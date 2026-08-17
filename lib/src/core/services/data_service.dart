@@ -9,79 +9,51 @@ import 'package:siade2/src/core/constants/api_constants.dart';
 class DataService {
   final ApiClient _apiClient = ApiClient();
 
+  /// Extrait la liste paginée d'une réponse DRF.
+  ///
+  /// Les méthodes de lecture ci-dessous ne rattrapent volontairement aucune
+  /// erreur : Dio lève déjà sur tout statut hors 2xx, et transformer la panne
+  /// en liste vide rendait « le serveur est injoignable » indiscernable de
+  /// « il n'y a rien à afficher ». C'est [DataProvider] qui décide quoi en
+  /// dire à l'utilisateur.
+  List<T> _liste<T>(
+    dynamic corps,
+    T Function(Map<String, dynamic>) depuisJson,
+  ) {
+    final resultats = corps is Map ? corps['results'] : null;
+    if (resultats is! List) return const [];
+    return resultats
+        .whereType<Map<String, dynamic>>()
+        .map(depuisJson)
+        .toList();
+  }
+
   // ─── Récupérer les Speakers (Sponsors dans l'API) ───────────────────────────
   Future<List<Speaker>> fetchSpeakers() async {
-    try {
-      final response = await _apiClient.get(ApiConstants.sponsors);
-      if (response.statusCode == 200) {
-        // DRF renvoie les données dans une clé 'results' quand il y a pagination
-        final List<dynamic> data = response.data['results'] ?? [];
-        return data.map((json) => Speaker.fromJson(json)).toList();
-      }
-      return [];
-    } catch (e) {
-      print("Erreur fetchSpeakers: $e");
-      return [];
-    }
+    final response = await _apiClient.get(ApiConstants.sponsors);
+    return _liste(response.data, Speaker.fromJson);
   }
 
   // ─── Récupérer les Programmes ──────────────────────────────────────────────
   Future<List<Program>> fetchPrograms() async {
-    try {
-      final response = await _apiClient.get(ApiConstants.program);
-      if (response.statusCode == 200) {
-        // Idem pour les programmes
-        final List<dynamic> data = response.data['results'] ?? [];
-        return data.map((json) => Program.fromJson(json)).toList();
-      }
-      return [];
-    } catch (e) {
-      print("Erreur fetchPrograms: $e");
-      return [];
-    }
+    final response = await _apiClient.get(ApiConstants.program);
+    return _liste(response.data, Program.fromJson);
   }
   // ─── Récupérer les Exposants ──────────────────────────────────────────────────
   Future<List<Exponent>> fetchExponents() async {
-    try {
-      final response = await _apiClient.get(ApiConstants.exposants);
-      if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['results'] ?? [];
-        return data.map((json) => Exponent.fromJson(json)).toList();
-      }
-      return [];
-    } catch (e) {
-      print('Erreur fetchExponents: $e');
-      return [];
-    }
+    final response = await _apiClient.get(ApiConstants.exposants);
+    return _liste(response.data, Exponent.fromJson);
   }
   // ─── Récupérer les Articles (News) ─────────────────────────────────────────
   Future<List<Article>> fetchArticles() async {
-    try {
-      final response = await _apiClient.get(ApiConstants.articles);
-      if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['results'] ?? [];
-        return data.map((json) => Article.fromJson(json)).toList();
-      }
-      return [];
-    } catch (e) {
-      print("Erreur fetchArticles: $e");
-      return [];
-    }
+    final response = await _apiClient.get(ApiConstants.articles);
+    return _liste(response.data, Article.fromJson);
   }
 
   // ─── Récupérer les Caterers (Restauration) ────────────────────────────────
   Future<List<Caterer>> fetchCaterers() async {
-    try {
-      final response = await _apiClient.get(ApiConstants.caterers);
-      if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['results'] ?? [];
-        return data.map((json) => Caterer.fromJson(json)).toList();
-      }
-      return [];
-    } catch (e) {
-      print('Erreur fetchCaterers: $e');
-      return [];
-    }
+    final response = await _apiClient.get(ApiConstants.caterers);
+    return _liste(response.data, Caterer.fromJson);
   }
 
   // ─── Authentification ───────────────────────────────────────────────────────

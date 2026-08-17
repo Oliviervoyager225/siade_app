@@ -344,6 +344,18 @@ abstract class AppLocalizations {
   /// **'Une erreur est survenue'**
   String get error;
 
+  /// No description provided for @loadFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Contenu indisponible. Vérifiez votre connexion.'**
+  String get loadFailed;
+
+  /// No description provided for @retry.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réessayer'**
+  String get retry;
+
   /// No description provided for @home.
   ///
   /// In fr, this message translates to:

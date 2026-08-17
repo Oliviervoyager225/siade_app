@@ -45,21 +45,65 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException e, handler) async {
-          // Si erreur 401 (token expiré), on tente de refresh
-          if (e.response?.statusCode == 401) {
-            final refreshed = await _refreshToken();
-            if (refreshed) {
-              // On rejoue la requête initiale avec le nouveau token
-              return handler.resolve(await _retry(e.requestOptions));
-            }
+          if (e.response?.statusCode != 401) return handler.next(e);
+
+          // Une seule reprise par requête. Sans ce garde-fou, un point d'entrée
+          // réellement protégé ferait boucler l'intercepteur indéfiniment :
+          // 401 → reprise → 401 → reprise.
+          if (e.requestOptions.extra[_cleReprise] == true) {
+            return handler.next(e);
           }
-          return handler.next(e);
+          e.requestOptions.extra[_cleReprise] = true;
+
+          if (await _refreshToken()) {
+            return _rejouer(e, handler);
+          }
+
+          // Le rafraîchissement a échoué : les deux jetons sont morts. Les
+          // conserver empoisonnerait toutes les requêtes suivantes, car
+          // `onRequest` rattache l'en-tête dès qu'il trouve un jeton — y
+          // compris vers les ressources publiques, qui répondent 200 sans
+          // authentification. L'app restait vide jusqu'à une déconnexion
+          // manuelle, sans jamais se réparer d'elle-même.
+          await clearTokens();
+          return _rejouer(e, handler);
         },
       ),
     );
   }
 
-  Future<bool> _refreshToken() async {
+  /// Clé marquant une requête déjà reprise, portée par `RequestOptions.extra`.
+  static const String _cleReprise = 'reprise_401';
+
+  /// Rejoue la requête, en laissant remonter un éventuel second échec.
+  ///
+  /// `handler.resolve` attend une réponse : si [_retry] lève, l'exception
+  /// s'échapperait de l'intercepteur au lieu d'atteindre l'appelant.
+  Future<void> _rejouer(
+    DioException e,
+    ErrorInterceptorHandler handler,
+  ) async {
+    try {
+      handler.resolve(await _retry(e.requestOptions));
+    } on DioException catch (echec) {
+      handler.next(echec);
+    }
+  }
+
+  /// Rafraîchissement en cours, partagé entre les appels concurrents.
+  Future<bool>? _rafraichissementEnCours;
+
+  /// Mutualise les rafraîchissements concurrents.
+  ///
+  /// `DataProvider.loadAllData` lance cinq requêtes en parallèle : avec un
+  /// jeton expiré, elles déclencheraient cinq échanges de rafraîchissement
+  /// simultanés pour un seul résultat utile.
+  Future<bool> _refreshToken() {
+    return _rafraichissementEnCours ??= _rafraichir()
+        .whenComplete(() => _rafraichissementEnCours = null);
+  }
+
+  Future<bool> _rafraichir() async {
     final refresh = await _storage.read(key: 'refresh_token');
     if (refresh == null) return false;
 
@@ -80,15 +124,23 @@ class ApiClient {
   }
 
   Future<Response<dynamic>> _retry(RequestOptions requestOptions) async {
-    final options = Options(
-      method: requestOptions.method,
-      headers: requestOptions.headers,
-    );
+    // L'en-tête est retiré ici, puis reposé par `onRequest` à partir du
+    // stockage. Le transmettre tel quel renverrait le jeton qu'on vient
+    // précisément de remplacer ou d'écarter.
+    final headers = Map<String, dynamic>.from(requestOptions.headers)
+      ..remove('Authorization');
+
     return _dio.request<dynamic>(
       requestOptions.path,
       data: requestOptions.data,
       queryParameters: requestOptions.queryParameters,
-      options: options,
+      options: Options(
+        method: requestOptions.method,
+        headers: headers,
+        // `extra` porte le garde-fou anti-boucle : le perdre autoriserait une
+        // nouvelle reprise à chaque 401.
+        extra: requestOptions.extra,
+      ),
     );
   }
 

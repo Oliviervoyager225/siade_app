@@ -1,4 +1,5 @@
 export 'carousel_widget.dart';
+export 'section_indisponible.dart';
 export 'speakers.dart';
 export 'exponents.dart';
 export 'programs.dart';

@@ -132,6 +132,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get error => 'Une erreur est survenue';
 
   @override
+  String get loadFailed => 'Contenu indisponible. Vérifiez votre connexion.';
+
+  @override
+  String get retry => 'Réessayer';
+
+  @override
   String get home => 'Accueil';
 
   @override

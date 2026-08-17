@@ -21,6 +21,14 @@ import 'package:siade2/src/features/login/widgets/widgets.dart';
 /// Les PNG atterrissent dans `screenshots/`, puis le workflow Codemagic les
 /// ramène à 1284 × 2778, l'un des deux formats acceptés par Apple pour
 /// l'emplacement 6,5 pouces.
+///
+/// Convention de nommage, imposée par le refus au titre de la règle 2.3.3 :
+/// « la majorité des captures doit montrer l'app en cours d'utilisation ».
+///   `NN_…`    → captures d'écrans réels, destinées à l'App Store ;
+///   `promo_…` → onboarding et connexion, qui ne comptent pas comme
+///               « app en cours d'utilisation » et ne doivent donc pas
+///               dominer la fiche ;
+///   `debug_…` → diagnostic uniquement, jamais envoyé.
 const String kEmail = String.fromEnvironment('SCREENSHOT_EMAIL');
 const String kPassword = String.fromEnvironment('SCREENSHOT_PASSWORD');
 
@@ -69,13 +77,13 @@ void main() {
     // troisième porte le bouton « Découvrir » : on la capture via ce
     // bouton plutôt qu'à l'aveugle, sinon elle sort en double.
     await patienter(6);
-    await capturer('01_onboarding_1');
+    await capturer('promo_onboarding_1');
     await patienter(4);
-    await capturer('02_onboarding_2');
+    await capturer('promo_onboarding_2');
 
     final decouvrir = find.text('Découvrir');
     if (await attendre(decouvrir, secondes: 30)) {
-      await capturer('03_onboarding_3');
+      await capturer('promo_onboarding_3');
       await tester.tap(decouvrir.first, warnIfMissed: false);
     } else {
       // ignore: avoid_print
@@ -89,7 +97,7 @@ void main() {
       print('[captures] écran de connexion jamais atteint');
       return;
     }
-    await capturer('04_connexion');
+    await capturer('promo_connexion');
 
     if (kEmail.isEmpty || kPassword.isEmpty) {
       // ignore: avoid_print
@@ -138,9 +146,11 @@ void main() {
     }
     // Les écrans connectés chargent leurs données par le réseau.
     await patienter(10);
-    await capturer('05_accueil_connecte');
+    await capturer('01_accueil');
 
     // Les destinations de la barre sont des GestureDetector personnalisés.
+    // Ordre des onglets, cf. app_layout.dart : 0 menu, 1 messages, 2 accueil,
+    // 3 notifications, 4 profil.
     final navBar = find.byType(NavigationBar);
     if (navBar.evaluate().isEmpty) return;
     final onglets = find.descendant(
@@ -150,10 +160,53 @@ void main() {
     final total = onglets.evaluate().length;
     // ignore: avoid_print
     print('[captures] $total onglets détectés');
-    for (var i = 1; i < total && i < 5; i++) {
-      await tester.tap(onglets.at(i), warnIfMissed: false);
+
+    /// Sélectionne un onglet. Rend `false` si l'index n'existe pas.
+    Future<bool> ouvrirOnglet(int index) async {
+      if (index >= total) return false;
+      await tester.tap(onglets.at(index), warnIfMissed: false);
       await patienter(8);
-      await capturer('0${5 + i}_onglet_$i');
+      return true;
     }
-  }, timeout: const Timeout(Duration(minutes: 15)));
+
+    const nomsOnglets = {1: 'messages', 3: 'notifications', 4: 'profil'};
+    var numero = 2;
+    for (final entry in nomsOnglets.entries) {
+      if (!await ouvrirOnglet(entry.key)) continue;
+      await capturer('0${numero++}_${entry.value}');
+    }
+
+    // --- Écrans du menu ---------------------------------------------------
+    // Les fonctionnalités propres au salon (galerie, restauration,
+    // localisation) : ce sont elles qu'Apple attend sur la fiche, car elles
+    // montrent l'app en cours d'utilisation plutôt qu'une page d'accroche.
+    // Les libellés viennent de l10n (app_localizations_fr.dart).
+    for (final entree in const ['Galerie', 'Resto SIADE', 'Localisation']) {
+      // Le menu est l'onglet 0 ; ouvrir un écran le recouvre, il faut donc y
+      // revenir à chaque tour.
+      if (!await ouvrirOnglet(0)) break;
+
+      final item = find.text(entree);
+      if (item.evaluate().isEmpty) {
+        // Libellé absent (langue différente, entrée renommée) : on passe à la
+        // suivante plutôt que d'interrompre la série.
+        // ignore: avoid_print
+        print('[captures] entrée "$entree" introuvable');
+        continue;
+      }
+
+      await tester.tap(item.first, warnIfMissed: false);
+      await patienter(10);
+      final nom = entree.toLowerCase().replaceAll(' ', '_');
+      await capturer('0${numero++}_$nom');
+
+      // Refermer l'écran empilé avant le tour suivant.
+      try {
+        await tester.pageBack();
+      } catch (_) {
+        // Pas de route à dépiler : l'onglet suivant remettra l'app d'aplomb.
+      }
+      await patienter(5);
+    }
+  }, timeout: const Timeout(Duration(minutes: 20)));
 }

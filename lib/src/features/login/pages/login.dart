@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:siade2/src/core/services/firebase_auth_service.dart';
 import 'package:siade2/src/features/home/pages/pages.dart';
 import 'package:siade2/src/features/login/pages/pages.dart';
 import 'package:siade2/src/features/login/widgets/widgets.dart';
@@ -17,6 +18,7 @@ class Login extends StatefulWidget {
 class _LoginState extends State<Login> {
   bool rememberMe = false;
   bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -27,31 +29,49 @@ class _LoginState extends State<Login> {
     super.dispose();
   }
 
-  Future<void> _handleGoogleLogin() async {
-    setState(() => _isGoogleLoading = true);
-    final success = await context.read<UserProvider>().loginWithGoogleHybrid();
-    setState(() => _isGoogleLoading = false);
+  Future<void> _handleGoogleLogin() => _handleOAuthLogin(
+        connexion: () =>
+            context.read<UserProvider>().loginWithGoogleHybrid(),
+        majChargement: (v) => setState(() => _isGoogleLoading = v),
+        erreurParDefaut: 'Erreur Google Sign-In',
+      );
 
-    if (mounted) {
-      if (success) {
-        // Google → session longue (Firebase gère le refresh, on marque 30j)
-        final expiry = DateTime.now().add(const Duration(days: 30));
-        await const FlutterSecureStorage()
-            .write(key: 'session_expires_at', value: expiry.toIso8601String());
+  Future<void> _handleAppleLogin() => _handleOAuthLogin(
+        connexion: () => context.read<UserProvider>().loginWithAppleHybrid(),
+        majChargement: (v) => setState(() => _isAppleLoading = v),
+        erreurParDefaut: 'Erreur Sign in with Apple',
+      );
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => AppLayout()),
-        );
-      } else {
-        final error = context.read<UserProvider>().error;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error ?? 'Erreur Google Sign-In'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+  /// Chemin commun aux connexions Google et Apple : seul le fournisseur change.
+  Future<void> _handleOAuthLogin({
+    required Future<bool> Function() connexion,
+    required void Function(bool) majChargement,
+    required String erreurParDefaut,
+  }) async {
+    majChargement(true);
+    final success = await connexion();
+    if (!mounted) return;
+    majChargement(false);
+
+    if (success) {
+      // OAuth → session longue (Firebase gère le refresh, on marque 30j)
+      final expiry = DateTime.now().add(const Duration(days: 30));
+      await const FlutterSecureStorage()
+          .write(key: 'session_expires_at', value: expiry.toIso8601String());
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => AppLayout()),
+      );
+    } else {
+      final error = context.read<UserProvider>().error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error ?? erreurParDefaut),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -343,13 +363,41 @@ class _LoginState extends State<Login> {
                       ),
                       SizedBox(height: 18),
 
-                      _isGoogleLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : OutlineButton(
+                      // Règle App Store 4.8 : Sign in with Apple doit être
+                      // proposé au même niveau que le service tiers. Les deux
+                      // boutons partagent donc la même rangée, la même largeur
+                      // et le même style — aucun des deux n'est mis en avant.
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlineButton(
                               text: 'Google',
-                              icon: Icons.g_mobiledata,
+                              iconAsset: 'assets/images/google.png',
+                              isLoading: _isGoogleLoading,
                               onTap: _handleGoogleLogin,
                             ),
+                          ),
+                          // Affiché partout où la connexion Apple peut
+                          // réellement aboutir : nativement sur iOS, et sur
+                          // Android dès qu'un Services ID est fourni au build.
+                          if (FirebaseAuthService.appleProposable) ...[
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: OutlineButton(
+                                text: 'Apple',
+                                iconAsset: 'assets/images/apple.png',
+                                // Le logo est une silhouette monochrome :
+                                // sans teinte il disparaîtrait sur le fond
+                                // clair, où il est déjà presque blanc.
+                                iconColor:
+                                    isLight ? Colors.black : Colors.white,
+                                isLoading: _isAppleLoading,
+                                onTap: _handleAppleLogin,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                       SizedBox(height: 30),
                     ],
                   ),

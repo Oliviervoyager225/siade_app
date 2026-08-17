@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Capacité « Sign in with Apple », requise par la règle App Store 4.8.
+	     Elle doit aussi être activée sur l'App ID com.sahanalytics.siadeapp
+	     dans le Developer Portal, et le profil de provisionnement régénéré
+	     ensuite : sinon la signature échoue avec « provisioning profile does
+	     not include the com.apple.developer.applesignin entitlement ». -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
+</plist>

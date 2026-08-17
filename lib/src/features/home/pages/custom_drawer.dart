@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:siade2/src/commons/widgets/optimized_image.dart';
 import 'package:siade2/src/features/home/pages/blocked_users_page.dart';
+import 'package:siade2/src/features/home/pages/delete_account_page.dart';
 import 'package:provider/provider.dart';
 import 'package:siade2/l10n/app_localizations.dart';
 import 'package:siade2/src/features/home/pages/pages.dart';
@@ -372,6 +373,18 @@ class _CustomDrawerState extends State<CustomDrawer> {
                           isLight,
                           () => _ouvrirLien(
                               'https://siade.online/condition.html'),
+                        ),
+                        // Règle App Store 5.1.1(v) : la suppression du compte
+                        // doit être atteignable depuis l'app elle-même.
+                        _buildMenuItem(
+                          const Icon(
+                            Icons.person_remove_outlined,
+                            color: Colors.redAccent,
+                            size: 22,
+                          ),
+                          'Supprimer mon compte',
+                          isLight,
+                          () => ouvrirSuppressionCompte(context),
                         ),
                         _buildMenuItem(
                           const Icon(

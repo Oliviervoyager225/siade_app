@@ -1,22 +1,42 @@
 import 'package:flutter/material.dart';
-import 'package:sizer/sizer.dart';
-import 'dart:async';
 
 class OutlineButton extends StatelessWidget {
   final String text;
-  final IconData? icon;
+
+  /// Chemin d'une image d'assets affichée à gauche du libellé.
+  ///
+  /// Remplace l'ancien paramètre `icon` de type [IconData], qui était
+  /// trompeur : sa valeur était ignorée et le bouton dessinait toujours
+  /// `google.png`. Ajouter un second fournisseur de connexion demandait donc
+  /// de pouvoir désigner l'image réellement voulue.
+  final String? iconAsset;
+
+  /// Teinte appliquée à [iconAsset]. À laisser nulle pour un logo
+  /// polychrome comme celui de Google ; à renseigner pour une silhouette
+  /// monochrome comme le logo Apple, qui doit suivre le thème sous peine
+  /// d'être invisible sur l'un des deux fonds.
+  final Color? iconColor;
+
+  /// Un spinner remplace le contenu, sans changer la taille du bouton : la
+  /// rangée de connexions ne doit pas se réorganiser pendant l'attente.
+  final bool isLoading;
+
   final VoidCallback onTap;
 
   const OutlineButton({
     Key? key,
     required this.text,
-    this.icon,
+    this.iconAsset,
+    this.iconColor,
+    this.isLoading = false,
     required this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final isLight = Theme.of(context).brightness == Brightness.light;
+    final couleurTexte = isLight ? const Color(0xFF60438C) : Colors.white;
+
     return Container(
       height: 50,
       decoration: BoxDecoration(
@@ -31,29 +51,39 @@ class OutlineButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(25),
-          onTap: onTap,
+          onTap: isLoading ? null : onTap,
           child: Center(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (icon != null) ...[
-                  Image.asset(
-                    'assets/images/google.png', 
-                    width: 24,
-                    height: 24,
+            child: isLoading
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: couleurTexte,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (iconAsset != null) ...[
+                        Image.asset(
+                          iconAsset!,
+                          width: 24,
+                          height: 24,
+                          color: iconColor,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        text,
+                        style: TextStyle(
+                          color: couleurTexte,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                ],
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: isLight ? Color(0xFF60438C) : Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

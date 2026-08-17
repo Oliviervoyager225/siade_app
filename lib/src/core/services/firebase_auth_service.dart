@@ -1,13 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform;
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'notification_service.dart';
 
 /// Service pour gérer l'authentification Firebase
-/// Supporte Email/Password et Google Sign-In
+/// Supporte Email/Password, Google Sign-In et Sign in with Apple
 class FirebaseAuthService {
   /// Délai au-delà duquel une écriture Firestore est abandonnée.
   ///
@@ -111,7 +116,7 @@ class FirebaseAuthService {
         // attendre ajoutait jusqu'à 45 s au retour de cette méthode quand
         // Firestore ne répond pas, dépassant le délai posé par l'appelant, qui
         // prenait alors une connexion réussie pour des identifiants invalides.
-        unawaited(_createOrUpdateUserDocument(user, isGoogleSignIn: false));
+        unawaited(_createOrUpdateUserDocument(user, fournisseur: 'email'));
         unawaited(
           NotificationService().refreshTokenForCurrentUser().catchError((_) {}),
         );
@@ -168,7 +173,7 @@ class FirebaseAuthService {
 
       if (user != null) {
         // Même raison que pour la connexion e-mail : Firestore en arrière-plan.
-        unawaited(_createOrUpdateUserDocument(user, isGoogleSignIn: true));
+        unawaited(_createOrUpdateUserDocument(user, fournisseur: 'google'));
         unawaited(
           NotificationService().refreshTokenForCurrentUser().catchError((_) {}),
         );
@@ -196,6 +201,116 @@ class FirebaseAuthService {
       print('❌ Erreur Google Sign-Out: $e');
     }
   }
+
+  /// ═══════════════════════════════════════════════════════════════
+  ///  SIGN IN WITH APPLE
+  /// ═══════════════════════════════════════════════════════════════
+
+  /// Vrai quand la connexion Apple peut réellement aboutir sur cet appareil.
+  ///
+  /// Uniquement sur les plateformes Apple, où le système délivre lui-même un
+  /// jeton d'identité signé sans configuration serveur. Ailleurs — Android,
+  /// web — Apple n'expose que son flux OAuth par navigateur, qui réclame un
+  /// Services ID et une clé privée déclarés dans le Developer Portal : sans
+  /// eux le bouton s'afficherait pour répondre `invalid_client` au premier
+  /// appui, et un service de connexion visible mais non fonctionnel est pire
+  /// que son absence.
+  ///
+  /// Sert à décider de l'affichage du bouton. Le jour où la connexion Apple
+  /// sur Android devient souhaitable, c'est ici et dans [signInWithApple]
+  /// qu'il faut intervenir, en passant un `webAuthenticationOptions`.
+  static bool get appleProposable => Platform.isIOS || Platform.isMacOS;
+
+  /// Chaîne aléatoire liant la demande Apple à la réponse Firebase.
+  ///
+  /// Apple signe le nonce haché dans son jeton d'identité ; Firebase compare
+  /// ensuite le nonce brut que nous lui transmettons. Sans ce couple, un jeton
+  /// Apple intercepté ailleurs pourrait être rejoué contre notre projet.
+  String _genererNonce([int longueur = 32]) {
+    const alphabet =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._';
+    final aleatoire = Random.secure();
+    return List.generate(
+      longueur,
+      (_) => alphabet[aleatoire.nextInt(alphabet.length)],
+    ).join();
+  }
+
+  /// Se connecter avec Apple.
+  ///
+  /// Renvoie `null` si l'utilisateur ferme la feuille système, comme
+  /// [signInWithGoogle], pour que l'appelant distingue une annulation d'un
+  /// échec.
+  Future<User?> signInWithApple() async {
+    try {
+      final nonceBrut = _genererNonce();
+      final nonceHache = sha256.convert(utf8.encode(nonceBrut)).toString();
+
+      final identifiantApple = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonceHache,
+      );
+
+      final jeton = identifiantApple.identityToken;
+      if (jeton == null) {
+        throw 'Apple n\'a pas renvoyé de jeton d\'identité.';
+      }
+
+      final credential = OAuthProvider('apple.com').credential(
+        idToken: jeton,
+        rawNonce: nonceBrut,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      var user = userCredential.user;
+      if (user == null) return null;
+
+      // Apple ne transmet le nom qu'à la toute première autorisation : si on ne
+      // le persiste pas maintenant, il est définitivement perdu et le profil
+      // reste anonyme aux connexions suivantes.
+      final prenom = identifiantApple.givenName ?? '';
+      final nomFamille = identifiantApple.familyName ?? '';
+      final nomComplet = '$prenom $nomFamille'.trim();
+      if (nomComplet.isNotEmpty &&
+          (user.displayName == null || user.displayName!.trim().isEmpty)) {
+        await user.updateDisplayName(nomComplet);
+        await user.reload();
+        user = _auth.currentUser ?? user;
+      }
+
+      // Même raison que pour Google : Firestore ne doit pas retarder l'écran.
+      unawaited(_createOrUpdateUserDocument(user, fournisseur: 'apple'));
+      unawaited(
+        NotificationService().refreshTokenForCurrentUser().catchError((_) {}),
+      );
+
+      print('✅ Firebase: Connexion Apple réussie - ${user.uid}');
+      return user;
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        print('⚠️  Sign in with Apple annulé');
+        return null;
+      }
+      print('❌ Apple Authorization Error: ${e.code} - ${e.message}');
+      throw 'Connexion Apple impossible : ${e.message}';
+    } on FirebaseAuthException catch (e) {
+      print('❌ Firebase Auth Error: ${e.code} - ${e.message}');
+      if (e.code == 'account-exists-with-different-credential') {
+        throw 'Un compte existe déjà avec cette adresse. Connectez-vous avec '
+            'votre méthode habituelle.';
+      }
+      throw 'Erreur Sign in with Apple : ${e.message}';
+    } catch (e) {
+      print('❌ Erreur Sign in with Apple: $e');
+      rethrow;
+    }
+  }
+
+  /// Sign in with Apple n'est disponible qu'à partir d'iOS 13 / macOS 10.15.
+  Future<bool> appleDisponible() => SignInWithApple.isAvailable();
 
   /// ═══════════════════════════════════════════════════════════════
   /// 🗄️ FIRESTORE - GESTION DES DOCUMENTS UTILISATEUR
@@ -238,7 +353,7 @@ class FirebaseAuthService {
   /// Créer ou mettre à jour le document utilisateur (Google Sign-In)
   Future<void> _createOrUpdateUserDocument(
     User user, {
-    bool isGoogleSignIn = false,
+    String fournisseur = 'email',
   }) async {
     try {
       final userDocRef = _firestore.collection('users').doc(user.uid);
@@ -266,7 +381,7 @@ class FirebaseAuthService {
           'poste': 'ETUDIANT', // Valeur par défaut
           'organisation': '',
           'photoURL': user.photoURL,
-          'provider': isGoogleSignIn ? 'google' : 'email',
+          'provider': fournisseur,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }).timeout(_delaiFirestore);

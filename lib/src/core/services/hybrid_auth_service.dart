@@ -243,6 +243,48 @@ class HybridAuthService {
   }
 
   /// ═══════════════════════════════════════════════════════════════
+  ///  SIGN IN WITH APPLE
+  /// ═══════════════════════════════════════════════════════════════
+
+  /// Connexion avec Apple (Firebase uniquement, comme Google).
+  ///
+  /// Django n'expose pas encore d'endpoint OAuth : le compte vit côté Firebase,
+  /// ce qui suffit pour toutes les fonctionnalités sociales de l'app.
+  Future<HybridAuthResult> loginWithApple() async {
+    try {
+      print('🔄 Hybrid Auth: Tentative de connexion Apple');
+
+      final firebaseUser = await _firebaseAuth.signInWithApple();
+
+      if (firebaseUser == null) {
+        return HybridAuthResult(
+          success: false,
+          isDjangoAuthenticated: false,
+          isFirebaseAuthenticated: false,
+          error: 'Connexion Apple annulée',
+        );
+      }
+
+      print('✅ Firebase Auth: Connexion Apple réussie - ${firebaseUser.uid}');
+
+      return HybridAuthResult(
+        success: true,
+        isDjangoAuthenticated: false,
+        isFirebaseAuthenticated: true,
+        firebaseUser: firebaseUser,
+      );
+    } catch (e) {
+      print('❌ Sign in with Apple Error: $e');
+      return HybridAuthResult(
+        success: false,
+        isDjangoAuthenticated: false,
+        isFirebaseAuthenticated: false,
+        error: e is String ? e : e.toString(),
+      );
+    }
+  }
+
+  /// ═══════════════════════════════════════════════════════════════
   /// 🔄 SYNCHRONISATION DES IDENTITÉS
   /// ═══════════════════════════════════════════════════════════════
 

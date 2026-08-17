@@ -185,13 +185,33 @@ class UserProvider extends ChangeNotifier {
   }
 
   // ─── LOGIN GOOGLE HYBRIDE (Firebase + Django) ──────────────────────────
-  Future<bool> loginWithGoogleHybrid() async {
+  Future<bool> loginWithGoogleHybrid() => _loginFournisseurOAuth(
+        connexion: _hybridAuthService.loginWithGoogle,
+        fournisseur: 'google',
+        erreurParDefaut: 'Erreur Google Sign-In.',
+      );
+
+  // ─── LOGIN APPLE (Firebase) ────────────────────────────────────────────
+  /// Requis par la règle App Store 4.8 : une connexion Apple équivalente doit
+  /// accompagner la connexion Google.
+  Future<bool> loginWithAppleHybrid() => _loginFournisseurOAuth(
+        connexion: _hybridAuthService.loginWithApple,
+        fournisseur: 'apple',
+        erreurParDefaut: 'Erreur Sign in with Apple.',
+      );
+
+  /// Tronc commun des connexions OAuth : seul le fournisseur change.
+  Future<bool> _loginFournisseurOAuth({
+    required Future<HybridAuthResult> Function() connexion,
+    required String fournisseur,
+    required String erreurParDefaut,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final result = await _hybridAuthService.loginWithGoogle();
+      final result = await connexion();
 
       if (result.success && result.isFirebaseAuthenticated) {
         final firebaseUser = result.firebaseUser!;
@@ -199,19 +219,22 @@ class UserProvider extends ChangeNotifier {
         _user = {
           'id': firebaseUser.uid,
           'email': firebaseUser.email ?? '',
-          'username': firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? 'Utilisateur',
+          'username': firebaseUser.displayName ??
+              firebaseUser.email?.split('@')[0] ??
+              'Utilisateur',
           'first_name': nameParts.isNotEmpty ? nameParts.first : '',
           'last_name': nameParts.length > 1 ? nameParts.skip(1).join(' ') : '',
           'photoURL': firebaseUser.photoURL ?? '',
+          'photo': firebaseUser.photoURL ?? '',
           'is_local_session': false,
-          'auth_provider': 'google',
+          'auth_provider': fournisseur,
         };
         _isLocalSession = false;
         _isLoading = false;
         notifyListeners();
         return true;
       } else {
-        _error = result.error ?? 'Erreur Google Sign-In.';
+        _error = result.error ?? erreurParDefaut;
       }
     } catch (e) {
       _error = e.toString();
@@ -534,6 +557,55 @@ class UserProvider extends ChangeNotifier {
     _isLocalSession = false;
     _pendingSyncCount = 0;
     notifyListeners();
+  }
+
+  // ─── SUPPRESSION DE COMPTE ─────────────────────────────────────────────────
+
+  /// Supprime définitivement le compte et les données associées.
+  ///
+  /// Exigé par la règle App Store 5.1.1(v) : une app qui permet de créer un
+  /// compte doit permettre de le supprimer depuis l'app, sans passer par le
+  /// support. Le travail est fait par la fonction Cloud `deleteAccount`, qui
+  /// dispose des droits admin nécessaires pour effacer les publications, les
+  /// conversations, les fichiers et l'utilisateur Firebase Auth lui-même — un
+  /// client authentifié ne peut pas y arriver seul.
+  ///
+  /// Renvoie `true` seulement si le serveur a confirmé la suppression. En cas
+  /// d'échec la session est laissée intacte : déconnecter l'utilisateur en
+  /// lui laissant croire que son compte est parti serait pire que l'erreur.
+  Future<bool> deleteAccount() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'deleteAccount',
+        options: HttpsCallableOptions(timeout: const Duration(minutes: 2)),
+      );
+      await callable.call();
+
+      // Le compte Firebase n'existe plus : on nettoie tout l'état local.
+      await _dataService.logout();
+      await _firebaseAuthService.signOut();
+      await _secureStorage.deleteAll();
+      _user = null;
+      _isLocalSession = false;
+      _pendingSyncCount = 0;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      _error = e.code == 'unauthenticated'
+          ? 'Session expirée. Reconnectez-vous puis réessayez.'
+          : (e.message ?? 'La suppression du compte a échoué.');
+    } catch (e) {
+      _error = 'Erreur réseau. Vérifiez votre connexion puis réessayez.';
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    return false;
   }
 
   // ─── SYNC MANUEL ───────────────────────────────────────────────────────────

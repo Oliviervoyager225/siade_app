@@ -1,4 +1,8 @@
-const functions = require("firebase-functions");
+// Imports explicites de la 2ᵉ génération. Depuis firebase-functions 6.0, la
+// racine `require("firebase-functions")` pointe déjà sur la v2 : la nommer
+// laissait croire qu'on écrivait de la v1, et c'est ce malentendu qui avait
+// figé `generateAgoraToken` sur une signature de gestionnaire abandonnée.
+const logger = require("firebase-functions/logger");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
@@ -25,19 +29,19 @@ const TOKEN_EXPIRY_SECONDS = 3600;
  *   - role        (int)    : 1 = broadcaster, 2 = audience
  *   - uid         (int)    : UID de l'utilisateur (0 = auto-assigné par Agora)
  */
-exports.generateAgoraToken = functions.https.onCall(async (data, context) => {
+exports.generateAgoraToken = onCall(async (request) => {
   // Vérifier que l'utilisateur est authentifié
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
+  if (!request.auth) {
+    throw new HttpsError(
       "unauthenticated",
       "L'utilisateur doit être connecté pour générer un token."
     );
   }
 
-  const { channelName, role, uid = 0 } = data;
+  const { channelName, role, uid = 0 } = request.data;
 
   if (!channelName || typeof channelName !== "string") {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "channelName est requis."
     );
@@ -59,7 +63,7 @@ exports.generateAgoraToken = functions.https.onCall(async (data, context) => {
     privilegeExpiredTs
   );
 
-  functions.logger.info(`Token généré pour channel: ${channelName}, uid: ${context.auth.uid}`);
+  logger.info(`Token généré pour channel: ${channelName}, uid: ${request.auth.uid}`);
 
   return { token };
 });
@@ -87,8 +91,8 @@ exports.sendPasswordResetCode = onCall(async (request) => {
   const emailUser = process.env.EMAIL_USER;
   const emailPassword = process.env.EMAIL_PASSWORD;
   if (!emailUser || !emailPassword) {
-    functions.logger.error("EMAIL_USER ou EMAIL_PASSWORD manquant dans functions/.env");
-    throw new functions.https.HttpsError("failed-precondition", "Service email non configuré.");
+    logger.error("EMAIL_USER ou EMAIL_PASSWORD manquant dans functions/.env");
+    throw new HttpsError("failed-precondition", "Service email non configuré.");
   }
 
   const transporter = nodemailer.createTransport({
@@ -111,7 +115,7 @@ exports.sendPasswordResetCode = onCall(async (request) => {
     `,
   });
 
-  functions.logger.info(`Code envoyé à ${email}`);
+  logger.info(`Code envoyé à ${email}`);
   return { success: true };
 });
 
@@ -153,7 +157,7 @@ exports.verifyCodeAndResetPassword = onCall(async (request) => {
   await admin.auth().updateUser(user.uid, { password: newPassword });
   await doc.ref.delete();
 
-  functions.logger.info(`Mot de passe réinitialisé pour ${email}`);
+  logger.info(`Mot de passe réinitialisé pour ${email}`);
   return { success: true };
 });
 
@@ -182,7 +186,7 @@ exports.cleanupExpiredStories = onSchedule(
       if (snapshot.size < 500) break;
     }
 
-    functions.logger.info(
+    logger.info(
       `cleanupExpiredStories: ${totalDeleted} story/stories supprimée(s)`
     );
   }
@@ -203,7 +207,7 @@ exports.notifyLiveStarted = onDocumentCreated(
     const hostName = liveData.hostName || "Quelqu'un";
     const hostPhoto = liveData.hostPhotoUrl || "";
 
-    functions.logger.info(`Live démarré: ${liveId} par ${hostUid} (${hostName})`);
+    logger.info(`Live démarré: ${liveId} par ${hostUid} (${hostName})`);
 
     // ── 1. Recueillir les UIDs des interacteurs ──────────────────────────
     const postsSnap = await db
@@ -247,11 +251,11 @@ exports.notifyLiveStarted = onDocumentCreated(
     }
 
     if (interactorUids.size === 0) {
-      functions.logger.info("notifyLiveStarted: aucun interacteur trouvé, fin.");
+      logger.info("notifyLiveStarted: aucun interacteur trouvé, fin.");
       return;
     }
 
-    functions.logger.info(`notifyLiveStarted: ${interactorUids.size} utilisateur(s) à notifier`);
+    logger.info(`notifyLiveStarted: ${interactorUids.size} utilisateur(s) à notifier`);
 
     // ── 2. Récupérer les tokens FCM + créer les notifs in-app ───────────
     const uidsArray = Array.from(interactorUids);
@@ -294,11 +298,11 @@ exports.notifyLiveStarted = onDocumentCreated(
     }
 
     await notifBatch.commit();
-    functions.logger.info(`notifyLiveStarted: ${uidsArray.length} notifs in-app créées.`);
+    logger.info(`notifyLiveStarted: ${uidsArray.length} notifs in-app créées.`);
 
     // ── 3. Envoyer FCM en multicast (max 500 tokens par appel) ──────────
     if (fcmTokens.length === 0) {
-      functions.logger.info("notifyLiveStarted: aucun token FCM, skip push.");
+      logger.info("notifyLiveStarted: aucun token FCM, skip push.");
       return;
     }
 
@@ -336,14 +340,184 @@ exports.notifyLiveStarted = onDocumentCreated(
       try {
         const response = await admin.messaging().sendEachForMulticast(message);
         totalSent += response.successCount;
-        functions.logger.info(
+        logger.info(
           `FCM chunk: ${response.successCount}/${tokenChunk.length} envoyé(s), échecs: ${response.failureCount}`
         );
       } catch (err) {
-        functions.logger.error("Erreur FCM multicast:", err);
+        logger.error("Erreur FCM multicast:", err);
       }
     }
 
-    functions.logger.info(`notifyLiveStarted: ${totalSent} push FCM envoyé(s).`);
+    logger.info(`notifyLiveStarted: ${totalSent} push FCM envoyé(s).`);
   }
 );
+
+// ─── Suppression définitive d'un compte ──────────────────────────────────────
+// Règle App Store 5.1.1(v) : une app qui permet de créer un compte doit
+// permettre de le supprimer depuis l'app. Le nettoyage passe obligatoirement
+// par une fonction Cloud : un client authentifié ne peut ni effacer les
+// documents des autres participants d'une conversation, ni supprimer sa propre
+// entrée Firebase Auth de façon fiable après plusieurs mois de session.
+
+/** Taille maximale d'un batch d'écriture Firestore. */
+const TAILLE_BATCH = 450;
+
+/**
+ * Supprime tous les documents d'une requête, par pages, sans charger la
+ * collection entière en mémoire.
+ *
+ * @param {admin.firestore.Query} requete requête à vider
+ * @param {(doc: admin.firestore.QueryDocumentSnapshot) => Promise<void>} [avantSuppression]
+ *   travail à effectuer sur chaque document avant de l'effacer
+ * @return {Promise<number>} nombre de documents supprimés
+ */
+async function supprimerParLots(requete, avantSuppression) {
+  let total = 0;
+  for (;;) {
+    const snapshot = await requete.limit(TAILLE_BATCH).get();
+    if (snapshot.empty) return total;
+
+    if (avantSuppression) {
+      for (const doc of snapshot.docs) await avantSuppression(doc);
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    total += snapshot.size;
+
+    // Une page incomplète signifie qu'il n'y a plus rien après.
+    if (snapshot.size < TAILLE_BATCH) return total;
+  }
+}
+
+/** Vide une sous-collection entière. */
+async function viderSousCollection(reference) {
+  return supprimerParLots(reference);
+}
+
+/**
+ * Retire l'uid des tableaux `likedBy` où il apparaît, sinon les compteurs de
+ * réactions resteraient gonflés par un compte qui n'existe plus.
+ *
+ * @param {string} collection nom de la collection à parcourir
+ * @param {string} uid identifiant à retirer
+ */
+async function retirerDesLikes(collection, uid) {
+  for (;;) {
+    const snapshot = await db
+      .collection(collection)
+      .where("likedBy", "array-contains", uid)
+      .limit(TAILLE_BATCH)
+      .get();
+    if (snapshot.empty) return;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) =>
+      batch.update(doc.ref, {
+        likedBy: admin.firestore.FieldValue.arrayRemove(uid),
+      })
+    );
+    await batch.commit();
+
+    if (snapshot.size < TAILLE_BATCH) return;
+  }
+}
+
+/** Supprime récursivement un préfixe de Cloud Storage. */
+async function supprimerPrefixeStorage(prefixe) {
+  try {
+    await admin.storage().bucket().deleteFiles({ prefix: prefixe, force: true });
+  } catch (err) {
+    // Le compte doit disparaître même si un fichier résiste : on trace et on
+    // continue plutôt que d'abandonner la suppression à mi-chemin.
+    logger.warn(`Storage: échec sur "${prefixe}"`, err);
+  }
+}
+
+exports.deleteAccount = onCall({ timeoutSeconds: 540 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Vous devez être connecté pour supprimer votre compte."
+    );
+  }
+
+  logger.info(`deleteAccount: début pour ${uid}`);
+  const compteur = {};
+
+  // 1. Publications de l'utilisateur, et les commentaires qu'elles portent.
+  compteur.posts = await supprimerParLots(
+    db.collection("posts").where("userId", "==", uid),
+    async (doc) => {
+      await supprimerParLots(
+        db.collection("comments").where("postId", "==", doc.id)
+      );
+    }
+  );
+
+  // 2. Commentaires laissés sous les publications des autres.
+  compteur.commentaires = await supprimerParLots(
+    db.collection("comments").where("userId", "==", uid)
+  );
+
+  // 3. Réactions laissées ailleurs.
+  await retirerDesLikes("posts", uid);
+  await retirerDesLikes("comments", uid);
+  await retirerDesLikes("stories", uid);
+
+  // 4. Stories et lives.
+  compteur.stories = await supprimerParLots(
+    db.collection("stories").where("userId", "==", uid)
+  );
+  compteur.lives = await supprimerParLots(
+    db.collection("lives").where("hostUid", "==", uid),
+    async (doc) => {
+      await viderSousCollection(doc.ref.collection("comments"));
+    }
+  );
+
+  // 5. Appels passés et reçus.
+  compteur.appelsEmis = await supprimerParLots(
+    db.collection("calls").where("callerId", "==", uid)
+  );
+  compteur.appelsRecus = await supprimerParLots(
+    db.collection("calls").where("calleeId", "==", uid)
+  );
+
+  // 6. Conversations. Elles sont supprimées en entier, messages compris :
+  // conserver un fil face à un compte effacé laisserait le contenu écrit par
+  // l'utilisateur supprimé visible chez son interlocuteur.
+  compteur.conversations = await supprimerParLots(
+    db.collection("conversations").where("participants", "array-contains", uid),
+    async (doc) => {
+      await viderSousCollection(doc.ref.collection("messages"));
+    }
+  );
+
+  // 7. Notifications in-app (sous-collection "items" puis le document parent).
+  await viderSousCollection(
+    db.collection("notifications").doc(uid).collection("items")
+  );
+  await db.collection("notifications").doc(uid).delete();
+
+  // 8. Fichiers : médias des publications, puis avatars (nommés
+  // avatar_<uid>_<horodatage>.jpg, donc atteignables par préfixe).
+  await supprimerPrefixeStorage(`posts/${uid}/`);
+  await supprimerPrefixeStorage(`stories/${uid}/`);
+  await supprimerPrefixeStorage(`avatars/avatar_${uid}_`);
+
+  // 9. Profil.
+  await db.collection("users").doc(uid).delete();
+
+  // 10. L'identité elle-même, en dernier : si une étape précédente échoue,
+  // l'utilisateur peut se reconnecter et relancer la suppression. Dans l'ordre
+  // inverse, il resterait des données orphelines sans moyen de les atteindre.
+  await admin.auth().deleteUser(uid);
+
+  logger.info(
+    `deleteAccount: compte ${uid} supprimé — ${JSON.stringify(compteur)}`
+  );
+  return { success: true, deleted: compteur };
+});

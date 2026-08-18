@@ -259,8 +259,14 @@ class FirebaseAuthService {
         throw 'Apple n\'a pas renvoyé de jeton d\'identité.';
       }
 
+      // `accessToken` reçoit le code d'autorisation d'Apple. Il n'est pas
+      // facultatif malgré son nom : sans lui, Firebase refuse la connexion
+      // avec « Invalid OAuth response from apple.com », alors même que le
+      // jeton d'identité, son audience et le nonce sont tous corrects. Le
+      // SDK Firebase l'exige depuis firebase_auth 4.3.0.
       final credential = OAuthProvider('apple.com').credential(
         idToken: jeton,
+        accessToken: identifiantApple.authorizationCode,
         rawNonce: nonceBrut,
       );
 
